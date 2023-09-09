@@ -209,8 +209,33 @@ host$ echo $?
 knoll's second mode of operation allows inspecting the allowed display mode of 
 attached displays:
 ```bash
-knoll list
+host$ knoll list
+[
+  {
+    "uuid": "37d8832a2d6602cab9f78f30a301b230",
+    "modes": [
+      {
+        "scaled": true,
+        "color_depth": 8,
+        "frequency": 59,
+        "extents": [
+          1280,
+          800
+        ]
+      },
 ...
+      {
+        "scaled": true,
+        "color_depth": 8,
+        "frequency": 60,
+        "extents": [
+          1024,
+          768
+        ]
+      }
+    ]
+  }
+]
 ```
 This is useful for determining which display configurations may successfully be
 used in an input to knoll.
