@@ -1,8 +1,7 @@
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use humantime;
 use log::*;
-use serde::Serialize;
-use serde_any::format::Format;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Formatter;
 use std::io::IsTerminal;
@@ -36,7 +35,9 @@ pub enum KnollError {
     Config(valid_config::Error),
     Displays(displays::Error),
     Io(std::io::Error),
-    Serde(serde_any::Error),
+    DeRon(ron::error::SpannedError),
+    SerRon(ron::error::Error),
+    SerdeJson(serde_json::Error),
     Duration(humantime::DurationError),
 }
 
@@ -58,9 +59,21 @@ impl From<std::io::Error> for KnollError {
     }
 }
 
-impl From<serde_any::Error> for KnollError {
-    fn from(e: serde_any::Error) -> Self {
-        KnollError::Serde(e)
+impl From<ron::error::SpannedError> for KnollError {
+    fn from(e: ron::error::SpannedError) -> Self {
+        KnollError::DeRon(e)
+    }
+}
+
+impl From<ron::error::Error> for KnollError {
+    fn from(e: ron::error::Error) -> Self {
+        KnollError::SerRon(e)
+    }
+}
+
+impl From<serde_json::Error> for KnollError {
+    fn from(e: serde_json::Error) -> Self {
+        KnollError::SerdeJson(e)
     }
 }
 
@@ -114,10 +127,53 @@ impl std::fmt::Display for KnollError {
             // TODO Not specific enough to determine input versus output error?
             //   Introduce an additional wrapper?
             Io(ie) => write!(f, "I/O error: {}", ie),
-            Serde(se) => write!(f, "Deserialization error: {}", se),
+            DeRon(se) => write!(f, "RON deserialization error: {}", se),
+            SerRon(se) => write!(f, "RON serialization error: {}", se),
+            // TODO Separate out serialization and deserialization errors.
+            SerdeJson(se) => write!(f, "JSON (de)seserialization error: {}", se),
             Duration(de) => write!(f, "Invalid wait period duration: {}", de),
         }
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+/// Tag class to specify the kind of (de)serialization to be used.
+#[derive(Debug, Clone, Copy)]
+enum DataFormat {
+    Ron,
+    Json,
+}
+
+/// Helper to abstract over serialization, parameterized by the selected
+/// data format.
+fn generic_serialize<S: Serialize, W: Write>(
+    format: DataFormat,
+    s: &S,
+    writer: W,
+) -> Result<(), KnollError> {
+    match format {
+        DataFormat::Ron => {
+            let pretty_config = ron::ser::PrettyConfig::new();
+            // TODO For some inexplicable reason there is an asymmetry in RON's
+            // serialization to
+            ron::ser::to_writer_pretty(writer, s, pretty_config)?
+        }
+        DataFormat::Json => serde_json::ser::to_writer_pretty(writer, s)?,
+    }
+    Ok(())
+}
+
+/// Helper to abstract over deserialization, parameterized by the selected
+/// data format.
+fn generic_deserialize<'a, D: Deserialize<'a>>(
+    format: DataFormat,
+    str: &'a str,
+) -> Result<D, KnollError> {
+    Ok(match format {
+        DataFormat::Ron => ron::de::from_str(str)?,
+        DataFormat::Json => serde_json::from_str(str)?,
+    })
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -136,8 +192,8 @@ pub fn run<'l, DS: DisplayState, IN: Read + IsTerminal, OUT: Write>(
     // Examine the serialization format option.
     let format_opt: Option<&str> = matches.get_one::<String>("FORMAT").map(|s| s.as_str());
     let format = match format_opt {
-        Some("ron") => Format::Ron,
-        Some("json") => Format::Json,
+        Some("ron") => DataFormat::Ron,
+        Some("json") => DataFormat::Json,
         // This error should have be caught during argument parsing.
         _ => panic!("Invalid serialization format"),
     };
@@ -300,7 +356,7 @@ fn open_output<'l, OUT: Write>(
 /// there being a mistake in the input such that it cannot be deserializd.
 fn read_config_groups<'l, IN: Read + IsTerminal>(
     input: Box<dyn BufRead + 'l>,
-    format: Format,
+    format: DataFormat,
 ) -> Result<Vec<ValidConfigGroup>, KnollError> {
     // TODO Use `read_to_end` instead?
     // Accumulate lines of output.
@@ -314,7 +370,7 @@ fn read_config_groups<'l, IN: Read + IsTerminal>(
         return Err(KnollError::EmptyConfiguration);
     }
 
-    let cgs: ConfigGroups = serde_any::from_str(input_str.as_str(), format)?;
+    let cgs: ConfigGroups = generic_deserialize(format, input_str.as_str())?;
 
     Ok(validate_config_groups(cgs)?)
 }
@@ -491,7 +547,7 @@ fn pipeline_command<DS: DisplayState>(
     quiet: bool,
     config_groups: Vec<ValidConfigGroup>,
     output: &mut dyn Write,
-    format: Format,
+    format: DataFormat,
 ) -> Result<(), KnollError> {
     let mut display_state = DS::current()?;
 
@@ -506,7 +562,7 @@ fn pipeline_command<DS: DisplayState>(
     // Unless quieted, write the display state to the output
     if !quiet {
         let cgs = state_to_config(&display_state);
-        serde_any::to_writer_pretty(output, &cgs, format)?;
+        generic_serialize(format, &cgs, output)?;
     }
 
     Ok(())
@@ -526,7 +582,7 @@ where
 
 fn list_command<DS: DisplayState>(
     output: &mut dyn Write,
-    format: Format,
+    format: DataFormat,
 ) -> Result<(), KnollError> {
     let display_state = DS::current()?;
 
@@ -541,7 +597,7 @@ fn list_command<DS: DisplayState>(
     }
 
     // Serialize them to output.
-    serde_any::to_writer_pretty(output, &groups, format)?;
+    generic_serialize(format, &groups, output)?;
 
     Ok(())
 }

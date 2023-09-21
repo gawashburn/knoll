@@ -243,7 +243,7 @@ used in an input to knoll.
 #### Daemon mode
 Finally, knoll also supports a "daemon" mode. 
 ```bash
-host$ knoll daemon --in=my_config.json
+host$ knoll daemon --input=my_config.json
 ```
 
 When in this mode, knoll will read its input as usual. It will then choose an
@@ -258,7 +258,7 @@ with cables, quickly opening and closing a laptop lid, or displays taking some
 time to awaken from sleep.  If the default period is too long for your desired 
 level of responsiveness, it can be configured:
 ```bash
-host$ knoll daemon --wait=500ms --in=my_config.json
+host$ knoll daemon --wait=500ms --input=my_config.json
 ```
 
 <a id="config_reference">

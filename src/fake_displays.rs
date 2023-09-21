@@ -168,7 +168,7 @@ impl FakeDisplay {
             FakeDisplayEdit::SetMode(mode) => {
                 // Checks to verify that the mode is one actually supported
                 // by this display.
-                assert!(self.uuid == mode.uuid);
+                assert_eq!(self.uuid, mode.uuid);
                 assert!(self.modes.contains(&mode));
                 self.mode = mode;
             }
@@ -249,13 +249,12 @@ impl DisplayState for FakeDisplayState {
     }
 
     type DisplayModeType = FakeDisplayMode;
-
     type DisplayType = FakeDisplay;
+    type DisplayConfigTransactionType = FakeDisplayConfigTransaction;
+
     fn get_displays(&self) -> &BTreeMap<String, Self::DisplayType> {
         &self.displays
     }
-
-    type DisplayConfigTransactionType = FakeDisplayConfigTransaction;
 
     fn configure(&self) -> Result<Self::DisplayConfigTransactionType, Error> {
         FakeDisplayConfigTransaction::new(&self.displays)

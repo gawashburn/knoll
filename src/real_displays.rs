@@ -19,7 +19,7 @@ use crate::displays::*;
 /// Helper for converting a `CGError` with a context string into a
 /// `display::Error`.  Should not be used when `CGError` is `success`.
 pub fn cg_error_to_error(cg_error: CGError, context: &str) -> Error {
-    assert!(cg_error != CGError::success);
+    assert_ne!(cg_error, CGError::success);
 
     Error::Internal(String::from(context))
 }
@@ -78,7 +78,7 @@ impl RealDisplayMode {
         assert!(mode_desc.freq > 0, "Invalid frequency");
 
         RealDisplayMode {
-            display_id: display_id,
+            display_id,
             mode: mode_desc.mode,
             scaled: mode_desc.scale > 1.0,
             color_depth: mode_desc.depth as usize,
@@ -433,14 +433,14 @@ impl RealDisplay {
         let cg_point = cg_display_bounds(display_id).origin;
 
         Ok(RealDisplay {
-            display_id: display_id,
-            uuid: uuid,
-            enabled: enabled,
+            display_id,
+            uuid,
+            enabled,
             origin: Point {
                 x: cg_point.x as i64,
                 y: cg_point.y as i64,
             },
-            rotation: rotation,
+            rotation,
             mode: current_mode.unwrap(),
             modes: mode_buckets.into_keys().collect::<Vec<RealDisplayMode>>(),
         })
@@ -514,13 +514,12 @@ impl DisplayState for RealDisplayState {
     }
 
     type DisplayModeType = RealDisplayMode;
-
     type DisplayType = RealDisplay;
+    type DisplayConfigTransactionType = RealDisplayConfigTransaction;
+
     fn get_displays(&self) -> &BTreeMap<String, Self::DisplayType> {
         &self.displays
     }
-
-    type DisplayConfigTransactionType = RealDisplayConfigTransaction;
 
     fn configure(&self) -> Result<Self::DisplayConfigTransactionType, Error> {
         RealDisplayConfigTransaction::new(&self.displays)
