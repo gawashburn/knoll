@@ -11,6 +11,7 @@ mod displays;
 mod fake_displays;
 mod knoll;
 mod real_displays;
+mod serde;
 mod valid_config;
 
 use std::io::Write;

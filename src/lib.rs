@@ -10,4 +10,5 @@ pub mod displays;
 pub mod fake_displays;
 pub mod knoll;
 pub mod real_displays;
+mod serde;
 pub mod valid_config;
