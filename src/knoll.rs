@@ -5,7 +5,7 @@ use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Formatter;
 use std::io::IsTerminal;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufReader, Read, Write};
 use std::path::PathBuf;
 use std::sync::{Condvar, Mutex};
 use stderrlog;
@@ -20,12 +20,12 @@ use crate::valid_config::*;
 ////////////////////////////////////////////////////////////////////////////////
 
 /// Representation of all the possible failure modes.
-pub enum KnollError {
+pub enum Error {
     NoConfigGroups,
-    EmptyConfiguration,
     Config(valid_config::Error),
     Displays(displays::Error),
     Io(std::io::Error),
+    Utf8(std::string::FromUtf8Error),
     Serde(crate::serde::Error),
     Duration(humantime::DurationError),
 
@@ -39,39 +39,45 @@ pub enum KnollError {
     AmbiguousConfigGroup(Vec<String>),
 }
 
-impl From<valid_config::Error> for KnollError {
+impl From<valid_config::Error> for Error {
     fn from(e: valid_config::Error) -> Self {
-        KnollError::Config(e)
+        Error::Config(e)
     }
 }
 
-impl From<displays::Error> for KnollError {
+impl From<displays::Error> for Error {
     fn from(e: displays::Error) -> Self {
-        KnollError::Displays(e)
+        Error::Displays(e)
     }
 }
 
-impl From<crate::serde::Error> for KnollError {
+impl From<crate::serde::Error> for Error {
     fn from(e: crate::serde::Error) -> Self {
-        KnollError::Serde(e)
+        Error::Serde(e)
     }
 }
 
-impl From<std::io::Error> for KnollError {
+impl From<std::io::Error> for Error {
     fn from(e: std::io::Error) -> Self {
-        KnollError::Io(e)
+        Error::Io(e)
     }
 }
 
-impl From<humantime::DurationError> for KnollError {
+impl From<std::string::FromUtf8Error> for Error {
+    fn from(e: std::string::FromUtf8Error) -> Self {
+        Error::Utf8(e)
+    }
+}
+
+impl From<humantime::DurationError> for Error {
     fn from(e: humantime::DurationError) -> Self {
-        KnollError::Duration(e)
+        Error::Duration(e)
     }
 }
 
-impl std::fmt::Display for KnollError {
+impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use KnollError::*;
+        use Error::*;
 
         match self {
             NoConfigGroups => write!(
@@ -79,7 +85,6 @@ impl std::fmt::Display for KnollError {
                 "The parsed input contains no configuration groups.  \
             Daemon mode requires at least one configuration group."
             ),
-            EmptyConfiguration => write!(f, "Input is empty."),
             NoMatchingConfigGroup(uuids) => {
                 write!(
                     f,
@@ -110,11 +115,13 @@ impl std::fmt::Display for KnollError {
             Displays(de) => {
                 write!(f, "{}", de)
             }
+            Serde(se) => se.fmt(f),
+            Utf8(ue) => write!(f, "Invalid UTF-8 in input: {}", ue),
+            Duration(de) => write!(f, "Invalid wait period duration: {}", de),
+
             // TODO Not specific enough to determine input versus output error?
             //   Introduce an additional wrapper?
             Io(ie) => write!(f, "I/O error: {}", ie),
-            Serde(se) => se.fmt(f),
-            Duration(de) => write!(f, "Invalid wait period duration: {}", de),
         }
     }
 }
@@ -124,11 +131,11 @@ impl std::fmt::Display for KnollError {
 /// Generic entry point to the knoll command-line tool.  
 /// It is parameterized by the DisplayState implementation as well as
 /// the input and out.
-pub fn run<'l, DS: DisplayState, IN: Read + IsTerminal, OUT: Write>(
+pub fn run<'l, DS: DisplayState, IN: Read + IsTerminal, OUT: Write + 'l>(
     args: &Vec<String>,
-    stdin: &'l mut IN,
-    stdout: &'l mut OUT,
-) -> Result<(), KnollError> {
+    stdin: IN,
+    stdout: OUT,
+) -> Result<(), Error> {
     // Handle parsing the command-line arguments.
     let matches = argument_parse(args);
 
@@ -146,7 +153,7 @@ pub fn run<'l, DS: DisplayState, IN: Read + IsTerminal, OUT: Write>(
         .module(module_path!())
         .verbosity(matches.get_count("VERBOSITY") as usize)
         .show_level(false)
-        .timestamp(stderrlog::Timestamp::Off)
+        .timestamp(stderrlog::Timestamp::Millisecond)
         .init()
         .unwrap();
 
@@ -155,20 +162,13 @@ pub fn run<'l, DS: DisplayState, IN: Read + IsTerminal, OUT: Write>(
         Some(("daemon", sub_matches)) => {
             info!("Daemon mode selected.");
 
-            let opt_input = open_input(stdin, sub_matches.get_one::<PathBuf>("IN"))?;
-            let config_groups = match opt_input {
-                Some(input) => read_config_groups::<IN>(input, format)?,
-                None => vec![],
-            };
-            // Must have at least one configuration group for daemon mode.
-            if config_groups.is_empty() {
-                return Err(KnollError::NoConfigGroups);
-            }
+            let config_reader =
+                ConfigReader::new(format, stdin, sub_matches.get_one::<PathBuf>("IN"))?;
+
             // Calling unwrap here should be okay, as there is a default value.
             let wait_string = sub_matches.get_one::<String>("WAIT").unwrap();
             let wait_period = humantime::parse_duration(wait_string)?;
-
-            daemon_command::<DS>(config_groups, wait_period)
+            daemon_command::<DS>(config_reader, wait_period)
         }
         Some(("list", sub_matches)) => {
             info!("List mode selected.");
@@ -178,17 +178,12 @@ pub fn run<'l, DS: DisplayState, IN: Read + IsTerminal, OUT: Write>(
         }
         _ => {
             info!("Pipeline mode selected.");
-
             // Should we print the resulting configuration?
             let quiet = matches.get_flag("QUIET");
-            let opt_input = open_input(stdin, matches.get_one::<PathBuf>("IN"))?;
-            let config_groups = match opt_input {
-                Some(input) => read_config_groups::<IN>(input, format)?,
-                None => vec![],
-            };
+            let config_reader = ConfigReader::new(format, stdin, matches.get_one::<PathBuf>("IN"))?;
             let mut output = open_output(stdout, matches.get_one::<PathBuf>("OUT"))?;
 
-            pipeline_command::<DS>(quiet, config_groups, output.as_mut(), format)
+            pipeline_command::<DS>(quiet, config_reader, output.as_mut(), format)
         }
     }
 }
@@ -253,37 +248,91 @@ fn argument_parse(args: &Vec<String>) -> ArgMatches {
     cmd.get_matches_from(args)
 }
 
-/// Helper for handling the input argument.  If no input path was provided
-/// stdin will be used, unless it is the terminal rather than a pipe, etc.
-/// In which case None will be returned, to single the program was not
-/// provided an input.  Otherwise, a boxed `BufRead` will be returned that
-/// can be used to read the input.
-fn open_input<'l, IN: Read + IsTerminal>(
-    stdin: &'l mut IN,
-    opt_path: Option<&PathBuf>,
-) -> std::io::Result<Option<Box<dyn BufRead + 'l>>> {
-    let input: Option<Box<dyn BufRead>> = match opt_path {
-        Some(path) => Some(Box::new(BufReader::new(std::fs::File::open(path)?))),
-        None => {
-            // If stdin is a terminal rather than a redirect, do not try to
-            // read from it.  Otherwise, BufRead may block forever waiting
-            // for data.
-            if stdin.is_terminal() {
-                None
-            } else {
-                Some(Box::new(BufReader::new(stdin)))
-            }
-        }
-    };
+////////////////////////////////////////////////////////////////////////////////
 
-    Ok(input)
+/// `ConfigReader` is a helper to abstract away from reading the configuration,
+/// rather than just reading it directly.  Daemon mode takes advantage of this
+/// so that it is possible to update the configuration without having to restart
+/// knoll.  However, it will only be able to reload if the input is specified as
+/// a file.  If there was no file input and `stdin` is to be use, then it will
+/// be read once and subsequent calls to `groups()` will yield the same
+/// configuration.  If `stdin` happens to be a terminal, rather than a pipe,
+/// etc. the result will be empty.
+struct ConfigReader {
+    /// Format to use when deserializing configurations.
+    format: crate::serde::Format,
+    /// Optional path to reload the configurations from.
+    opt_path: Option<PathBuf>,
+    /// Current configurations.
+    config_string: String,
 }
+
+impl ConfigReader {
+    /// Create a new `ConfigReader` given the file format, the current `stdin`
+    /// and possibly a path to read a configuration from.
+    fn new<IN: Read + IsTerminal>(
+        format: crate::serde::Format,
+        stdin: IN,
+        opt_path: Option<&PathBuf>,
+    ) -> Result<Self, Error> {
+        let config_string = match opt_path {
+            // If we are reading from a file, we can skip reading it here,
+            // as we'll reload it every time the configuration is requested.
+            Some(_) => String::new(),
+            None => {
+                // If stdin is a terminal rather than a redirect, do not try to
+                // read from it.  Otherwise, BufRead may block forever waiting
+                // for data.
+                if stdin.is_terminal() {
+                    String::new()
+                // We cannot reload stdin, so read it now.  This also simplifies
+                // the lifetime of the ConfigReader.
+                } else {
+                    let mut buffer = Vec::new();
+                    let _ = BufReader::new(stdin).read_to_end(&mut buffer)?;
+                    String::from_utf8(buffer)?
+                }
+            }
+        };
+
+        Ok(Self {
+            opt_path: opt_path.cloned(),
+            config_string,
+            format,
+        })
+    }
+
+    /// Parse and validate configuration groups.  If the `ConfigReader` was
+    /// created with an input file, this will reload the configurations
+    /// groups from that file first.
+    fn groups(&mut self) -> Result<Vec<ValidConfigGroup>, Error> {
+        // If the configuration is being read from a file, reload it now.
+        match &self.opt_path {
+            Some(path) => self.config_string = std::fs::read_to_string(path)?,
+            None => { /* No-op */ }
+        }
+
+        // If the input is empty return no configuration groups, as
+        // deserialization will fail.
+        if self.config_string.len() == 0 {
+            return Ok(vec![]);
+        }
+
+        // Deserialize and validate the configurations.
+        Ok(validate_config_groups(crate::serde::deserialize(
+            self.format,
+            self.config_string.as_str(),
+        )?)?)
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 /// Helper for handling the output argument.  It no output path was provided,
 /// stdout will be used instead.  Will return a boxed `BufWrite` that can be
 /// used to write the program output.
-fn open_output<'l, OUT: Write>(
-    stdout: &'l mut OUT,
+fn open_output<'l, OUT: Write + 'l>(
+    stdout: OUT,
     opt_path: Option<&PathBuf>,
 ) -> std::io::Result<Box<dyn Write + 'l>> {
     let output: Box<dyn Write> = match opt_path {
@@ -294,36 +343,14 @@ fn open_output<'l, OUT: Write>(
     Ok(output)
 }
 
-/// Helper to read configuration groups in the given serialization format
-/// from the input.  Can either fail due to the input being empty or
-/// there being a mistake in the input such that it cannot be deserializd.
-fn read_config_groups<'l, IN: Read + IsTerminal>(
-    input: Box<dyn BufRead + 'l>,
-    format: crate::serde::Format,
-) -> Result<Vec<ValidConfigGroup>, KnollError> {
-    // TODO Use `read_to_end` instead?
-    // Accumulate lines of output.
-    let mut input_str = String::new();
-    for line_result in input.lines() {
-        input_str.push_str(line_result?.as_str());
-        input_str.push('\n');
-    }
-
-    if input_str.is_empty() {
-        return Err(KnollError::EmptyConfiguration);
-    }
-
-    let cgs: ConfigGroups = crate::serde::deserialize(format, input_str.as_str())?;
-
-    Ok(validate_config_groups(cgs)?)
-}
+////////////////////////////////////////////////////////////////////////////////
 
 /// Helper find the configuration group for the current display state.
 /// TODO Detect when configuration change would be a no-op.
 fn find_most_precise_config_group<DS: DisplayState>(
-    vcgs: &Vec<ValidConfigGroup>,
+    vcgs: &[ValidConfigGroup],
     display_state: &DS,
-) -> Result<ValidConfigGroup, KnollError> {
+) -> Result<ValidConfigGroup, Error> {
     let displays = display_state.get_displays();
     let num_displays = displays.len();
 
@@ -352,7 +379,7 @@ fn find_most_precise_config_group<DS: DisplayState>(
 
     // No matching configurations
     if best_len == 0 {
-        Err(KnollError::NoMatchingConfigGroup(
+        Err(Error::NoMatchingConfigGroup(
             // TODO
             displays.keys().cloned().collect(),
         ))
@@ -361,7 +388,7 @@ fn find_most_precise_config_group<DS: DisplayState>(
     else if matching.len() > 1 {
         // TODO Should use selected serialization format rather the debug
         //   format.
-        Err(KnollError::AmbiguousConfigGroup(
+        Err(Error::AmbiguousConfigGroup(
             matching.into_iter().map(|cg| format!("{:?}", cg)).collect(),
         ))
     } else {
@@ -370,6 +397,8 @@ fn find_most_precise_config_group<DS: DisplayState>(
         Ok(matching.pop().unwrap().clone())
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 /// Helper to convert a `Config` to `DisplayModePattern`
 fn mode_pattern_from_config(config: &Config) -> DisplayModePattern {
@@ -381,21 +410,23 @@ fn mode_pattern_from_config(config: &Config) -> DisplayModePattern {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 /// Helper to select a matching display mode for the given display
 /// using the requested configuration.
 /// Will fail if there is no matching display mode, or if the configuration
 /// does not uniquely determine a display mode.
-fn select_mode<D: Display>(display: &D, config: &Config) -> Result<D::DisplayModeType, KnollError> {
+fn select_mode<D: Display>(display: &D, config: &Config) -> Result<D::DisplayModeType, Error> {
     let pattern = mode_pattern_from_config(config);
     let mut modes = display.matching_modes(&pattern);
     if modes.is_empty() {
         // TODO Should use selected serialization format rather the debug
         //   format.
-        Err(KnollError::NoMatchingDisplayMode(format!("{:?}", config)))
+        Err(Error::NoMatchingDisplayMode(format!("{:?}", config)))
     } else if modes.len() > 1 {
         // TODO Should use selected serialization format rather the debug
         //   format.
-        Err(KnollError::AmbiguousDisplayMode(
+        Err(Error::AmbiguousDisplayMode(
             modes.into_iter().map(|m| format!("{:?}", m)).collect(),
         ))
     } else {
@@ -405,11 +436,13 @@ fn select_mode<D: Display>(display: &D, config: &Config) -> Result<D::DisplayMod
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 /// Configure displays from configuration group.
 fn configure_displays<DS: DisplayState>(
     display_state: &DS,
     config_group: ValidConfigGroup,
-) -> Result<(), KnollError> {
+) -> Result<(), Error> {
     // Determine that we can find appropriate display modes for each
     // configuration before we start configuring.
     let mut selected_modes = HashMap::new();
@@ -457,6 +490,8 @@ fn configure_displays<DS: DisplayState>(
     Ok(cfg.commit()?)
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 /// Helper to convert a given display state into configuration groups.
 fn state_to_config<DS: DisplayState>(display_state: &DS) -> ConfigGroups {
     let configs: Vec<Config> = display_state
@@ -488,11 +523,13 @@ fn state_to_config<DS: DisplayState>(display_state: &DS) -> ConfigGroups {
 
 fn pipeline_command<DS: DisplayState>(
     quiet: bool,
-    config_groups: Vec<ValidConfigGroup>,
+    mut config_reader: ConfigReader,
     output: &mut dyn Write,
     format: crate::serde::Format,
-) -> Result<(), KnollError> {
+) -> Result<(), Error> {
     let mut display_state = DS::current()?;
+
+    let config_groups = config_reader.groups()?;
 
     // If there are any configuration groups, attempt to apply them.
     if !config_groups.is_empty() {
@@ -526,7 +563,7 @@ where
 fn list_command<DS: DisplayState>(
     output: &mut dyn Write,
     format: crate::serde::Format,
-) -> Result<(), KnollError> {
+) -> Result<(), Error> {
     let display_state = DS::current()?;
 
     let mut groups: Vec<DisplayModeGroup<DS::DisplayModeType>> = Vec::new();
@@ -556,10 +593,10 @@ fn list_command<DS: DisplayState>(
 static RECONFIGURE_LOCK: Mutex<bool> = Mutex::new(false);
 static RECONFIGURE_CONDVAR: Condvar = Condvar::new();
 
-fn daemon_command<DS: DisplayState>(
-    config_groups: Vec<ValidConfigGroup>,
+fn daemon_command<'l, DS: DisplayState>(
+    mut config_reader: ConfigReader,
     wait_period: std::time::Duration,
-) -> Result<(), KnollError> {
+) -> Result<(), Error> {
     extern "C" fn recon_callback() {
         match RECONFIGURE_LOCK.try_lock() {
             Ok(ref mut reconfig_started) => {
@@ -598,29 +635,37 @@ fn daemon_command<DS: DisplayState>(
             }
         }
 
-        // Wait for the display configuration to quiese.
+        // Wait for the display configuration to quiesce.
         std::thread::sleep(wait_period);
         info!("Reconfiguring displays.");
-        match DS::current() {
-            Err(de) => {
-                error!("{}", de)
-            }
-            Ok(display_state) => {
-                match find_most_precise_config_group(&config_groups, &display_state) {
-                    Err(ke) => {
-                        error!("{}", ke)
-                    }
-                    Ok(config_group) => {
-                        match configure_displays(&display_state, config_group) {
-                            Err(ke) => {
-                                error!("{}", ke)
-                            }
-                            Ok(()) => { /* Reconfiguration succeeded, no-op */ }
-                        }
-                    }
+
+        // As close as I think we can get to monadic binding.
+        let result = config_reader
+            .groups()
+            .and_then(|config_groups: Vec<ValidConfigGroup>| {
+                if config_groups.is_empty() {
+                    Err(Error::NoConfigGroups)
+                } else {
+                    DS::current()
+                        .map_err(|e| e.into())
+                        .and_then(|display_state: DS| {
+                            find_most_precise_config_group(&config_groups, &display_state).and_then(
+                                |config_group: ValidConfigGroup| {
+                                    configure_displays(&display_state, config_group)
+                                },
+                            )
+                        })
                 }
+            });
+
+        match result {
+            Err(e) => {
+                error!("{}", e);
             }
-        }
+            Ok(()) => {
+                info!("Reconfiguration successful.");
+            }
+        };
 
         // Reconfiguration has completed.
         *reconfig_in_progress = false;

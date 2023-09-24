@@ -1,9 +1,7 @@
 # knoll
 
 <p>
-<a href="https://crates.io/crates/knoll"><img
-src="https://img.shields.io/crates/v/knoll?style=flat-square"
-alt="Crates.io version" /></a>
+<a href="https://crates.io/crates/knoll"><img src="https://img.shields.io/crates/v/knoll?style=flat-square" alt="Crates.io version" /></a>
 </p>
 
 A simple command-line tool for manipulating the configuration of macOS displays.
@@ -223,7 +221,7 @@ host$ knoll list
           800
         ]
       },
-...
+
       {
         "scaled": true,
         "color_depth": 8,
@@ -246,12 +244,20 @@ Finally, knoll also supports a "daemon" mode.
 host$ knoll daemon --input=my_config.json
 ```
 
-When in this mode, knoll will read its input as usual. It will then choose an
-applicable configuration group, should one exist, and apply it. However, if no
-applicable group is found, it will not exit with an error. Either way, it will
-continue to run and wait for a display reconfiguration event from the operating
-system. At that point it will wait a few seconds for the configuration to
-settle, and then attempt to find a matching configuration and apply it.
+When in this mode, knoll wait until a display configuration event occurs. At
+that time, if provided an input file, it will (re)load the configuration from 
+the file specified in the input argument.  It will then choose an applicable 
+configuration group, should one exist, and apply it.  However, if no
+applicable group is found, it will not exit with an error. 
+
+Either way, knoll will  continue to run and wait for a display reconfiguration 
+event from the operating system. At that point it will wait a few seconds for 
+the configuration to settle, and then attempt to find a matching configuration
+and apply it.
+
+Note, that while knoll can still accept a piped configuration, because of the
+nature of pipes, it will not be able to reload the configuration upon a
+reconfiguration event.
 
 This quiescence period is to avoid knoll from triggering during some fumbling 
 with cables, quickly opening and closing a laptop lid, or displays taking some 

@@ -24,13 +24,11 @@ use real_displays::RealDisplayState;
 pub fn main() {
     // Dispatch to the run function.  As this is entry point to the real
     // program, we use the actual stdin, stdout and RealDisplayState.
-    let mut stdin = std::io::stdin();
-    let mut stdout = std::io::stdout();
     let args: Vec<String> = std::env::args().into_iter().collect();
     match knoll::run::<RealDisplayState, std::io::Stdin, std::io::Stdout>(
         &args,
-        &mut stdin,
-        &mut stdout,
+        std::io::stdin(),
+        std::io::stdout(),
     ) {
         // Hit an error, print it to stderr.
         Err(e) => {

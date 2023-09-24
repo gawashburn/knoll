@@ -61,7 +61,7 @@ pub enum Format {
 
 impl Format {
     /// Construct a `Format` from a string.
-    pub fn from(str: &str) -> Result<Format, Error> {
+    pub fn from(str: &str) -> Result<Self, Error> {
         match str {
             "ron" => Ok(Format::Ron),
             "json" => Ok(Format::Json),
