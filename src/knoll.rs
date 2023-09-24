@@ -2,13 +2,13 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use humantime;
 use log::*;
 use serde::Serialize;
+use simplelog::{TermLogger, WriteLogger};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Formatter;
 use std::io::IsTerminal;
 use std::io::{BufReader, Read, Write};
 use std::path::PathBuf;
 use std::sync::{Condvar, Mutex};
-use stderrlog;
 
 use crate::config::*;
 use crate::core_graphics;
@@ -28,6 +28,7 @@ pub enum Error {
     Utf8(std::string::FromUtf8Error),
     Serde(crate::serde::Error),
     Duration(humantime::DurationError),
+    LogInit(log::SetLoggerError),
 
     // TODO For these errors fall back to storing the configuration as a
     //   string because we cannot thread the configured serialization
@@ -75,6 +76,12 @@ impl From<humantime::DurationError> for Error {
     }
 }
 
+impl From<log::SetLoggerError> for Error {
+    fn from(e: log::SetLoggerError) -> Self {
+        Error::LogInit(e)
+    }
+}
+
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use Error::*;
@@ -118,6 +125,7 @@ impl std::fmt::Display for Error {
             Serde(se) => se.fmt(f),
             Utf8(ue) => write!(f, "Invalid UTF-8 in input: {}", ue),
             Duration(de) => write!(f, "Invalid wait period duration: {}", de),
+            LogInit(le) => write!(f, "Error initializing logger: {}", le),
 
             // TODO Not specific enough to determine input versus output error?
             //   Introduce an additional wrapper?
@@ -128,13 +136,60 @@ impl std::fmt::Display for Error {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+/// Helper to convert a verbosity magnitude into a logging `LevelFilter`.
+/// Verbosity of `0` corresponds to only logging `Error`s.
+fn verbosity_to_filter(verbosity: usize) -> LevelFilter {
+    match verbosity {
+        0 => LevelFilter::Error,
+        1 => LevelFilter::Warn,
+        2 => LevelFilter::Info,
+        3 => LevelFilter::Debug,
+        _ => LevelFilter::Trace,
+    }
+}
+
+/// Helper to configure the logger by verbosity and depending on whether it
+/// is writing to a terminal or not.
+fn configure_logger<ERR: Write + IsTerminal + Send + 'static>(
+    verbosity: usize,
+    stderr: ERR,
+) -> Result<(), Error> {
+    let mut config_builder = simplelog::ConfigBuilder::new();
+    config_builder.set_time_format_rfc3339();
+
+    let level_filter = verbosity_to_filter(verbosity);
+    if stderr.is_terminal() {
+        // If the destination is a terminal, use the `Termlogger`.
+        TermLogger::init(
+            level_filter,
+            config_builder.build(),
+            simplelog::TerminalMode::Stderr,
+            simplelog::ColorChoice::Auto,
+        )?
+    } else {
+        // Otherwise just use a plain `WriteLogger`.
+        WriteLogger::init(level_filter, config_builder.build(), stderr)?
+    };
+
+    Ok(())
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 /// Generic entry point to the knoll command-line tool.  
 /// It is parameterized by the DisplayState implementation as well as
-/// the input and out.
-pub fn run<'l, DS: DisplayState, IN: Read + IsTerminal, OUT: Write + 'l>(
+/// the input, output, and error targets.
+pub fn run<
+    'l,
+    DS: DisplayState,
+    IN: Read + IsTerminal,
+    OUT: Write + 'l,
+    ERR: Write + IsTerminal + Send + 'static,
+>(
     args: &Vec<String>,
     stdin: IN,
     stdout: OUT,
+    stderr: ERR,
 ) -> Result<(), Error> {
     // Handle parsing the command-line arguments.
     let matches = argument_parse(args);
@@ -149,13 +204,8 @@ pub fn run<'l, DS: DisplayState, IN: Read + IsTerminal, OUT: Write + 'l>(
     };
 
     // Set up logging.
-    stderrlog::new()
-        .module(module_path!())
-        .verbosity(matches.get_count("VERBOSITY") as usize)
-        .show_level(false)
-        .timestamp(stderrlog::Timestamp::Millisecond)
-        .init()
-        .unwrap();
+    let verbosity = matches.get_count("VERBOSITY") as usize;
+    configure_logger(verbosity, stderr)?;
 
     // Check to see which program mode should be used.
     match matches.subcommand() {

@@ -25,10 +25,11 @@ pub fn main() {
     // Dispatch to the run function.  As this is entry point to the real
     // program, we use the actual stdin, stdout and RealDisplayState.
     let args: Vec<String> = std::env::args().into_iter().collect();
-    match knoll::run::<RealDisplayState, std::io::Stdin, std::io::Stdout>(
+    match knoll::run::<RealDisplayState, std::io::Stdin, std::io::Stdout, std::io::Stderr>(
         &args,
         std::io::stdin(),
         std::io::stdout(),
+        std::io::stderr(),
     ) {
         // Hit an error, print it to stderr.
         Err(e) => {
