@@ -3,7 +3,7 @@ use humantime;
 use log::*;
 use serde::Serialize;
 use simplelog::{TermLogger, WriteLogger};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt::Formatter;
 use std::io::IsTerminal;
 use std::io::{BufReader, Read, Write};
@@ -551,8 +551,6 @@ fn state_to_config<DS: DisplayState>(display_state: &DS) -> ConfigGroups {
             let mode = display.current_mode();
             Config {
                 uuid: uuid.clone(),
-                // TODO Implement mirroring support.
-                mirrors: HashSet::new(),
                 enabled: Some(display.enabled()),
                 origin: Some(display.origin().clone()),
                 extents: Some(mode.extents().clone()),

@@ -2,19 +2,21 @@
 /// displays as well as requesting changes to that configuration.
 use crate::displays::Point;
 use crate::displays::Rotation;
-use std::collections::HashSet;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::{Eq, PartialEq};
 
 ////////////////////////////////////////////////////////////////////////////////
 
-/// Helper to serialize Option values as just the value itself.
+/// Helper to serialize Option values as just the value itself.  It does not
+/// need to handle the case of None, as it is intended to be used with the
+/// seree option `skip_serializing_if = "Option::is_none"`.
 fn serialize_opt<S, T>(opt: &Option<T>, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
     T: Serialize,
 {
+    assert!(opt.is_some());
     opt.as_ref().unwrap().serialize(serializer)
 }
 
@@ -29,12 +31,57 @@ where
 
 ////////////////////////////////////////////////////////////////////////////////
 
+/// Some basic sanity checking for `serialize_opt`.
+#[test]
+fn test_serialize_opt() {
+    let mut buffer = vec![];
+    {
+        let ron_pretty = ron::ser::PrettyConfig::default();
+        let mut ron_ser = ron::ser::Serializer::new(&mut buffer, Some(ron_pretty))
+            .expect("Constructing serializer should not fail.");
+
+        serialize_opt(&Some(0), &mut ron_ser).expect("Serialization should not fail.");
+    }
+    assert_eq!(
+        String::from_utf8(buffer.clone()).expect("String should be valid UTF-8."),
+        "0"
+    );
+
+    buffer.clear();
+    {
+        let mut json_ser = serde_json::ser::Serializer::new(&mut buffer);
+        serialize_opt(&Some(0), &mut json_ser).expect("Serialization should not fail.");
+    }
+    assert_eq!(
+        String::from_utf8(buffer.clone()).expect("String should be valid UTF-8."),
+        "0"
+    );
+}
+
+/// Some basic sanity checking for `deserialize_opt`.
+#[test]
+fn test_deserialize_opt() {
+    let mut json_de = serde_json::de::Deserializer::from_str("0");
+    let result: Option<u64> =
+        deserialize_opt(&mut json_de).expect("Deserialization should not fail");
+    assert_eq!(result, Some(0));
+
+    let mut ron_de =
+        ron::de::Deserializer::from_str("0").expect("Constructing deserializer should not fail.");
+    let result: Option<u64> =
+        deserialize_opt(&mut ron_de).expect("Deserialization should not fail");
+    assert_eq!(result, Some(0));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 /// A Config describes how to configure an individual display.
 #[derive(Debug, PartialEq, Eq, Clone, Default, Serialize, Deserialize)]
 pub struct Config {
     pub uuid: String,
-    #[serde(skip_serializing_if = "HashSet::is_empty", default)]
-    pub mirrors: HashSet<String>,
+    // TODO Add support for mirroring.
+    //#[serde(skip_serializing_if = "HashSet::is_empty", default)]
+    //pub mirrors: HashSet<String>,
     // TODO Is there a way to avoid repeating the same attributes?
     // It might be possible with macros, but so far I have not found
     // any notion of an defining an attribute alias.
@@ -90,7 +137,7 @@ pub struct Config {
 }
 
 /// A ConfigGroup describes how to configure a group attached of displays.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ConfigGroup {
     /// Order is irrelevant, but it would require some additional effort
@@ -100,7 +147,7 @@ pub struct ConfigGroup {
 
 /// ConfigGroups is simply a collection of ConfigGroups for different
 /// possible system configurations
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ConfigGroups {
     /// Order is irrelevant, but it would require some additional effort
@@ -110,12 +157,12 @@ pub struct ConfigGroups {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+/// Sanity check configuration serialization.
 #[test]
 fn test_serialization() {
     let c1 = Config::default();
     let c2 = Config {
         uuid: String::from("ab3456def"),
-        mirrors: HashSet::from([String::from("def456")]),
         enabled: Some(true),
         origin: Some(Point { x: 1, y: 2 }),
         extents: Some(Point { x: 3, y: 6 }),
@@ -125,13 +172,63 @@ fn test_serialization() {
         rotation: Some(Rotation::Ninety),
     };
 
-    let c1str = serde_json::ser::to_string_pretty(&c1).unwrap();
-    println!("c1: {}", c1str);
-    let c2str = serde_json::ser::to_string_pretty(&c2).unwrap();
-    println!("c2: {}", c2str);
-    let ron_pretty = ron::ser::PrettyConfig::new().struct_names(false);
-    let c3str = ron::ser::to_string_pretty(&c2, ron_pretty).unwrap();
-    println!("c2r: {}", c3str);
+    let c1_json_str =
+        serde_json::ser::to_string_pretty(&c1).expect("Serialization should not fail");
+    assert_eq!(
+        c1_json_str,
+        r#"{
+  "uuid": ""
+}"#
+    );
+
+    let c2_json_str =
+        serde_json::ser::to_string_pretty(&c2).expect("Serialization should not fail");
+    assert_eq!(
+        c2_json_str,
+        r#"{
+  "uuid": "ab3456def",
+  "enabled": true,
+  "origin": [
+    1,
+    2
+  ],
+  "extents": [
+    3,
+    6
+  ],
+  "scaled": true,
+  "frequency": 60,
+  "color_depth": 8,
+  "rotation": 90
+}"#
+    );
+
+    let ron_pretty = ron::ser::PrettyConfig::new();
+
+    let c1_ron_str =
+        ron::ser::to_string_pretty(&c1, ron_pretty.clone()).expect("Serialization should not fail");
+    assert_eq!(
+        c1_ron_str,
+        r#"(
+    uuid: "",
+)"#
+    );
+
+    let c2_ron_str =
+        ron::ser::to_string_pretty(&c2, ron_pretty.clone()).expect("Serialization should not fail");
+    assert_eq!(
+        c2_ron_str,
+        r#"(
+    uuid: "ab3456def",
+    enabled: true,
+    origin: (1, 2),
+    extents: (3, 6),
+    scaled: true,
+    frequency: 60,
+    color_depth: 8,
+    rotation: 90,
+)"#
+    );
 
     let cg1 = ConfigGroup {
         configs: vec![c1.clone(), c2.clone()],
@@ -139,58 +236,347 @@ fn test_serialization() {
 
     let cg2 = ConfigGroup { configs: vec![c1] };
 
-    let cg1str = serde_json::ser::to_string_pretty(&cg1).unwrap();
-    println!("cg1: {}", cg1str);
-    let ron_pretty = ron::ser::PrettyConfig::new().struct_names(false);
-    let cg2str = ron::ser::to_string_pretty(&cg1, ron_pretty).unwrap();
-    println!("cg1r: {}", cg2str);
-    let cg3str = serde_json::ser::to_string_pretty(&cg2).unwrap();
-    println!("cg2: {}", cg3str);
-    let ron_pretty = ron::ser::PrettyConfig::new().struct_names(false);
-    let cg4str = ron::ser::to_string_pretty(&cg2, ron_pretty).unwrap();
-    println!("cg2r: {}", cg4str);
+    let cg1_json_str =
+        serde_json::ser::to_string_pretty(&cg1).expect("Serialization should not fail");
+    assert_eq!(
+        cg1_json_str,
+        r#"[
+  {
+    "uuid": ""
+  },
+  {
+    "uuid": "ab3456def",
+    "enabled": true,
+    "origin": [
+      1,
+      2
+    ],
+    "extents": [
+      3,
+      6
+    ],
+    "scaled": true,
+    "frequency": 60,
+    "color_depth": 8,
+    "rotation": 90
+  }
+]"#
+    );
+
+    let cg1_ron_str = ron::ser::to_string_pretty(&cg1, ron_pretty.clone())
+        .expect("Serialization should not fail");
+    assert_eq!(
+        cg1_ron_str,
+        r#"[
+    (
+        uuid: "",
+    ),
+    (
+        uuid: "ab3456def",
+        enabled: true,
+        origin: (1, 2),
+        extents: (3, 6),
+        scaled: true,
+        frequency: 60,
+        color_depth: 8,
+        rotation: 90,
+    ),
+]"#
+    );
+
+    let cg2_json_str =
+        serde_json::ser::to_string_pretty(&cg2).expect("Serialization should not fail");
+    assert_eq!(
+        cg2_json_str,
+        r#"[
+  {
+    "uuid": ""
+  }
+]"#
+    );
+    let cg2_ron_str = ron::ser::to_string_pretty(&cg2, ron_pretty.clone())
+        .expect("Serialization should not fail");
+    assert_eq!(
+        cg2_ron_str,
+        r#"[
+    (
+        uuid: "",
+    ),
+]"#
+    );
 
     let cgs1 = ConfigGroups {
-        groups: vec![cg1.clone()],
+        groups: vec![cg1.clone(), cg2.clone()],
     };
     let cgs2 = ConfigGroups { groups: vec![cg2] };
 
-    let cgs1str = serde_json::ser::to_string_pretty(&cgs1).unwrap();
-    println!("cgs1: {}", cgs1str);
-    let ron_pretty = ron::ser::PrettyConfig::new().struct_names(false);
-    let cgs2str = ron::ser::to_string_pretty(&cgs1, ron_pretty).unwrap();
-    println!("cg1r: {}", cgs2str);
+    let cgs1_json_str =
+        serde_json::ser::to_string_pretty(&cgs1).expect("Serialization should not fail");
+    assert_eq!(
+        cgs1_json_str,
+        r#"[
+  [
+    {
+      "uuid": ""
+    },
+    {
+      "uuid": "ab3456def",
+      "enabled": true,
+      "origin": [
+        1,
+        2
+      ],
+      "extents": [
+        3,
+        6
+      ],
+      "scaled": true,
+      "frequency": 60,
+      "color_depth": 8,
+      "rotation": 90
+    }
+  ],
+  [
+    {
+      "uuid": ""
+    }
+  ]
+]"#
+    );
+    let cgs1_ron_str = ron::ser::to_string_pretty(&cgs1, ron_pretty.clone())
+        .expect("Serialization should not fail");
+    assert_eq!(
+        cgs1_ron_str,
+        r#"[
+    [
+        (
+            uuid: "",
+        ),
+        (
+            uuid: "ab3456def",
+            enabled: true,
+            origin: (1, 2),
+            extents: (3, 6),
+            scaled: true,
+            frequency: 60,
+            color_depth: 8,
+            rotation: 90,
+        ),
+    ],
+    [
+        (
+            uuid: "",
+        ),
+    ],
+]"#
+    );
 
-    let cgs3str = serde_json::ser::to_string_pretty(&cgs2).unwrap();
-    println!("cgs2: {}", cgs3str);
-    let ron_pretty = ron::ser::PrettyConfig::new().struct_names(false);
-    let cgs4str = ron::ser::to_string_pretty(&cgs2, ron_pretty).unwrap();
-    println!("cg2r: {}", cgs4str);
+    let cgs2_json_str =
+        serde_json::ser::to_string_pretty(&cgs2).expect("Serialization should not fail");
+    assert_eq!(
+        cgs2_json_str,
+        r#"[
+  [
+    {
+      "uuid": ""
+    }
+  ]
+]"#
+    );
+    let cgs2_ron_str = ron::ser::to_string_pretty(&cgs2, ron_pretty.clone())
+        .expect("Serialization should not fail");
+    assert_eq!(
+        cgs2_ron_str,
+        r#"[
+    [
+        (
+            uuid: "",
+        ),
+    ],
+]"#
+    );
 }
 
+/// Sanity check configuration deserialization.
 #[test]
 fn test_deserialization() {
-    let c3: Config = serde_json::de::from_str("{\"uuid\":\"abcdef1234\"}").unwrap();
-    println!("c3: {:?}", c3);
-    let c4: Config =
-        serde_json::de::from_str("{\"uuid\":\"abcdef1234\",\"enabled\": false, \"origin\":[1,2]}")
-            .unwrap();
-    println!("c4: {:?}", c4);
-    let c5: Config = serde_json::de::from_str("[\"abcdef123\", [], true]").unwrap();
-    println!("c5: {:?}", c5);
-    let c6: Config = ron::de::from_str("(uuid: \"abcdef1234\")").unwrap();
-    println!("c6: {:?}", c6);
-    let c7: Config = ron::de::from_str("(uuid: \"abcdef1234\", enabled: false)").unwrap();
-    println!("c7: {:?}", c7);
-    let c8: Config = ron::de::from_str("(uuid: \"abcdef1234\", origin:(1,2))").unwrap();
-    println!("c8: {:?}", c8);
-    let c9: Config =
-        ron::de::from_str("(uuid: \"abcdef1234\", enabled: false, origin:(0,1), rotation:180)")
-            .unwrap();
-    println!("c9: {:?}", c9);
+    match serde_json::de::from_str::<'static, Config>("{}") {
+        Err(_) => { /* Failed as expected, so no-op */ }
+        _ => panic!("Deserialization should have failed"),
+    };
 
-    let cg1: ConfigGroup = ron::de::from_str("[(uuid: \"abcdef1234\", origin:(1,2))]").unwrap();
-    println!("cg1: {:?}", cg1);
-    let cg2: ConfigGroup = serde_json::de::from_str("[{\"uuid\":\"abcdef1234\"}]").unwrap();
-    println!("cg2: {:?}", cg2);
+    match ron::de::from_str::<'static, Config>("()") {
+        Err(_) => { /* Failed as expected, so no-op */ }
+        _ => panic!("Deserialization should have failed"),
+    };
+
+    let c: Config = serde_json::de::from_str("{\"uuid\":\"abcdef1234\"}")
+        .expect("Deserialization should not fail");
+    assert_eq!(
+        c,
+        Config {
+            uuid: String::from("abcdef1234"),
+            enabled: None,
+            origin: None,
+            extents: None,
+            scaled: None,
+            frequency: None,
+            color_depth: None,
+            rotation: None,
+        }
+    );
+
+    let c: Config =
+        serde_json::de::from_str("{\"uuid\":\"abcdef1234\",\"enabled\": false, \"origin\":[1,2]}")
+            .expect("Deserialization should not fail");
+    assert_eq!(
+        c,
+        Config {
+            uuid: String::from("abcdef1234"),
+            enabled: Some(false),
+            origin: Some(Point { x: 1, y: 2 }),
+            extents: None,
+            scaled: None,
+            frequency: None,
+            color_depth: None,
+            rotation: None,
+        }
+    );
+
+    let c: Config =
+        serde_json::de::from_str("[\"abcdef123\", true]").expect("Deserialization should not fail");
+    assert_eq!(
+        c,
+        Config {
+            uuid: String::from("abcdef123"),
+            enabled: Some(true),
+            origin: None,
+            extents: None,
+            scaled: None,
+            frequency: None,
+            color_depth: None,
+            rotation: None,
+        }
+    );
+
+    let c: Config =
+        ron::de::from_str("(uuid: \"abcdef1234\")").expect("Deserialization should not fail");
+    assert_eq!(
+        c,
+        Config {
+            uuid: String::from("abcdef1234"),
+            enabled: None,
+            origin: None,
+            extents: None,
+            scaled: None,
+            frequency: None,
+            color_depth: None,
+            rotation: None,
+        }
+    );
+
+    let c: Config = ron::de::from_str("(uuid: \"abcdef1234\", enabled: false)")
+        .expect("Deserialization should not fail");
+    assert_eq!(
+        c,
+        Config {
+            uuid: String::from("abcdef1234"),
+            enabled: Some(false),
+            origin: None,
+            extents: None,
+            scaled: None,
+            frequency: None,
+            color_depth: None,
+            rotation: None,
+        }
+    );
+
+    let c: Config = ron::de::from_str("(uuid: \"abcdef1234\", origin:(1,2))")
+        .expect("Deserialization should not fail");
+    assert_eq!(
+        c,
+        Config {
+            uuid: String::from("abcdef1234"),
+            enabled: None,
+            origin: Some(Point { x: 1, y: 2 }),
+            extents: None,
+            scaled: None,
+            frequency: None,
+            color_depth: None,
+            rotation: None,
+        }
+    );
+
+    let c: Config =
+        ron::de::from_str("(uuid: \"abcdef1234\", enabled: false, origin:(0,1), rotation:180)")
+            .expect("Deserialization should not fail");
+    assert_eq!(
+        c,
+        Config {
+            uuid: String::from("abcdef1234"),
+            enabled: Some(false),
+            origin: Some(Point { x: 0, y: 1 }),
+            extents: None,
+            scaled: None,
+            frequency: None,
+            color_depth: None,
+            rotation: Some(Rotation::OneEighty),
+        }
+    );
+
+    let cg: ConfigGroup = serde_json::de::from_str("[{\"uuid\":\"abcdef1234\"}]")
+        .expect("Deserialization should not fail");
+    assert_eq!(
+        cg,
+        ConfigGroup {
+            configs: vec![Config {
+                uuid: String::from("abcdef1234"),
+                enabled: None,
+                origin: None,
+                extents: None,
+                scaled: None,
+                frequency: None,
+                color_depth: None,
+                rotation: None,
+            }]
+        }
+    );
+
+    let cg: ConfigGroup = ron::de::from_str("[(uuid: \"abcdef1234\", origin:(1,2))]")
+        .expect("Deserialization should not fail");
+    assert_eq!(
+        cg,
+        ConfigGroup {
+            configs: vec![Config {
+                uuid: String::from("abcdef1234"),
+                enabled: None,
+                origin: Some(Point { x: 1, y: 2 }),
+                extents: None,
+                scaled: None,
+                frequency: None,
+                color_depth: None,
+                rotation: None,
+            }]
+        }
+    );
+
+    let cgs: ConfigGroups = ron::de::from_str("[[(uuid: \"abcdef1234\", origin:(1,2))]]")
+        .expect("Deserialization should not fail");
+    assert_eq!(
+        cgs,
+        ConfigGroups {
+            groups: vec![ConfigGroup {
+                configs: vec![Config {
+                    uuid: String::from("abcdef1234"),
+                    enabled: None,
+                    origin: Some(Point { x: 1, y: 2 }),
+                    extents: None,
+                    scaled: None,
+                    frequency: None,
+                    color_depth: None,
+                    rotation: None,
+                }]
+            }]
+        }
+    );
 }
