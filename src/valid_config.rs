@@ -10,6 +10,8 @@ use std::hash::{Hash, Hasher};
 
 use crate::config::*;
 
+////////////////////////////////////////////////////////////////////////////////
+
 /// The possible errors that can ar
 pub enum Error {
     /// Reported when a configuration group contains a display with the same
@@ -64,6 +66,8 @@ impl std::fmt::Display for Error {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 #[derive(Debug, Clone)]
 pub struct ValidConfigGroup {
     pub uuids: BTreeSet<String>,
@@ -89,32 +93,41 @@ impl Eq for ValidConfigGroup {}
 
 impl PartialOrd for ValidConfigGroup {
     /// Ordering is by reverse inclusion.  We consider sets that contain
-    /// more elements, or are more "precise", to be "smaller".
+    /// more elements, or are more "precise", to be "smaller".  For
+    /// incomparable configurations, the ordering is based upon size.
+    ///
+    /// Despite this being ostensibly a "partial ordering", because
+    /// Rust's sort only uses `partial_cmp` rather than `cmp`, this has
+    /// been made a total order.
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         use Ordering::*;
-        match (
-            self.uuids.is_superset(&other.uuids),
-            other.uuids.is_superset(&self.uuids),
-        ) {
-            (true, true) => Some(Equal),
-            (true, false) => Some(Less),
-            (false, true) => Some(Greater),
-            _ => None,
-        }
+        Some(
+            match (
+                self.uuids.is_superset(&other.uuids),
+                other.uuids.is_superset(&self.uuids),
+            ) {
+                (true, true) => Equal,
+                (true, false) => Less,
+                (false, true) => Greater,
+
+                _ => {
+                    // There cannot be a true total ordering on configuration
+                    // groups, but this definition should be sufficient for
+                    // sorting configurations by precision.  However, given
+                    // that two incomparable configuration groups of the same
+                    // length are effectively treated as equal, if there are
+                    // duplicates, there is no guarantee the truly identical
+                    // configuration groups will be clustered together.
+                    other.uuids.len().cmp(&self.uuids.len())
+                }
+            },
+        )
     }
 }
 
 impl Ord for ValidConfigGroup {
-    /// There cannot be a true total ordering on configuration groups,
-    /// but this definition should be sufficient for sorting configurations
-    /// by precision.  However, given that two incomparable configuration
-    /// groups of the same length are effectively treated as equal, if
-    /// there are duplicates, there is no guarantee the truly identical
-    /// configuration groups will be clustered together.
-    fn cmp(&self, other: &Self) -> Ordering {
-        // If they are incomparable use their size.
-        self.partial_cmp(other)
-            .unwrap_or(other.uuids.len().cmp(&self.uuids.len()))
+    fn cmp(&self, _other: &Self) -> Ordering {
+        panic!("Ord is required sort ValidConfigGroup can be sorted, but isn't actually used.")
     }
 }
 
@@ -150,6 +163,111 @@ impl ValidConfigGroup {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+/// Check that `ValidConfigGroup::from` correctly reports an error for an
+/// empty group.
+#[test]
+fn test_valid_config_from_empty() {
+    match ValidConfigGroup::from(ConfigGroup { configs: vec![] }) {
+        Err(Error::EmptyGroup) => { /* Correctly detected error, so no-op */ }
+        Err(_) => panic!("Unexpected error in validation."),
+        Ok(_) => panic!("Failed to detect empty configuration."),
+    }
+}
+
+/// Check that `ValidConfigGroup::from` correctly reports an error for
+/// duplicate configurations.
+#[test]
+fn test_valid_config_from_duplicate() {
+    match ValidConfigGroup::from(ConfigGroup {
+        configs: vec![
+            Config {
+                uuid: String::from("abcdef1234"),
+                enabled: Some(false),
+                origin: None,
+                extents: None,
+                scaled: None,
+                frequency: None,
+                color_depth: None,
+                rotation: None,
+            },
+            Config {
+                uuid: String::from("abcdef1234"),
+                enabled: Some(false),
+                origin: None,
+                extents: None,
+                scaled: None,
+                frequency: None,
+                color_depth: None,
+                rotation: None,
+            },
+        ],
+    }) {
+        Err(Error::DuplicateDisplays(uuids)) => {
+            assert_eq!(uuids.len(), 1);
+            assert!(uuids.contains("abcdef1234"))
+        }
+        Err(_) => panic!("Unexpected error in validation."),
+        Ok(_) => panic!("Failed to detect empty configuration."),
+    }
+
+    match ValidConfigGroup::from(ConfigGroup {
+        configs: vec![
+            Config {
+                uuid: String::from("abcdef1234"),
+                enabled: Some(false),
+                origin: None,
+                extents: None,
+                scaled: None,
+                frequency: None,
+                color_depth: None,
+                rotation: None,
+            },
+            Config {
+                uuid: String::from("abcdef1234"),
+                enabled: Some(false),
+                origin: None,
+                extents: None,
+                scaled: None,
+                frequency: None,
+                color_depth: None,
+                rotation: None,
+            },
+            Config {
+                uuid: String::from("foobarbaz"),
+                enabled: Some(false),
+                origin: None,
+                extents: None,
+                scaled: None,
+                frequency: None,
+                color_depth: None,
+                rotation: None,
+            },
+            Config {
+                uuid: String::from("foobarbaz"),
+                enabled: Some(false),
+                origin: None,
+                extents: None,
+                scaled: None,
+                frequency: None,
+                color_depth: None,
+                rotation: None,
+            },
+        ],
+    }) {
+        Err(Error::DuplicateDisplays(uuids)) => {
+            assert_eq!(uuids.len(), 2);
+            assert!(uuids.contains("abcdef1234"));
+            assert!(uuids.contains("foobarbaz"));
+        }
+        Err(_) => panic!("Unexpected error in validation."),
+        Ok(_) => panic!("Failed to detect empty configuration."),
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 /// Helper to convert configuration groups into a vector of valid
 /// configuration groups.  This enforces that no configuration group applies
 /// to the same set of UUIDs.  The result will also be sorted from most
@@ -179,4 +297,138 @@ pub fn validate_config_groups(cgs: ConfigGroups) -> Result<Vec<ValidConfigGroup>
     let mut vec_groups: Vec<ValidConfigGroup> = valid_groups.into_iter().collect();
     vec_groups.sort();
     Ok(vec_groups)
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+/// Test that `validate_config_groups` detects duplicate configuration groups
+#[test]
+fn test_config_validation_duplicates() {
+    match validate_config_groups(ConfigGroups {
+        groups: vec![
+            ConfigGroup {
+                configs: vec![Config {
+                    uuid: String::from("abcdef1234"),
+                    enabled: Some(false),
+                    origin: None,
+                    extents: None,
+                    scaled: None,
+                    frequency: None,
+                    color_depth: None,
+                    rotation: None,
+                }],
+            },
+            ConfigGroup {
+                configs: vec![Config {
+                    uuid: String::from("abcdef1234"),
+                    enabled: Some(false),
+                    origin: None,
+                    extents: None,
+                    scaled: None,
+                    frequency: None,
+                    color_depth: None,
+                    rotation: None,
+                }],
+            },
+        ],
+    }) {
+        Err(Error::DuplicateGroups(groups)) => {
+            assert_eq!(groups.len(), 1);
+            assert!(groups
+                .iter()
+                .all(|cg| cg.uuids.len() == 1 && cg.uuids.contains("abcdef1234")))
+        }
+        Err(_) => panic!("Unexpected error in validation."),
+        Ok(_) => panic!("Failed to detect empty configuration."),
+    }
+
+    match validate_config_groups(ConfigGroups {
+        groups: vec![
+            ConfigGroup {
+                configs: vec![
+                    Config {
+                        uuid: String::from("abcdef1234"),
+                        enabled: Some(false),
+                        origin: None,
+                        extents: None,
+                        scaled: None,
+                        frequency: None,
+                        color_depth: None,
+                        rotation: None,
+                    },
+                    Config {
+                        uuid: String::from("foobarbaz"),
+                        enabled: Some(false),
+                        origin: None,
+                        extents: None,
+                        scaled: None,
+                        frequency: None,
+                        color_depth: None,
+                        rotation: None,
+                    },
+                ],
+            },
+            ConfigGroup {
+                configs: vec![
+                    Config {
+                        uuid: String::from("foobarbaz"),
+                        enabled: Some(false),
+                        origin: None,
+                        extents: None,
+                        scaled: None,
+                        frequency: None,
+                        color_depth: None,
+                        rotation: None,
+                    },
+                    Config {
+                        uuid: String::from("abcdef1234"),
+                        enabled: Some(false),
+                        origin: None,
+                        extents: None,
+                        scaled: None,
+                        frequency: None,
+                        color_depth: None,
+                        rotation: None,
+                    },
+                ],
+            },
+        ],
+    }) {
+        Err(Error::DuplicateGroups(groups)) => {
+            assert_eq!(groups.len(), 1);
+            assert!(groups.iter().all(|cg| cg.uuids.len() == 2
+                && cg.uuids.contains("abcdef1234")
+                && cg.uuids.contains("foobarbaz")));
+        }
+        Err(_) => panic!("Unexpected error in validation."),
+        Ok(_) => panic!("Failed to detect empty configuration."),
+    }
+}
+
+/// Test that sorting configuration groups works as expected.
+#[test]
+fn test_config_group_sorting() {
+    let configs = vec![
+        vec!["a"],
+        vec!["b"],
+        vec!["c"],
+        vec!["a", "b"],
+        vec!["a", "c"],
+        vec!["a", "b", "c"],
+    ];
+
+    fn convert(vec: Vec<&str>) -> ValidConfigGroup {
+        ValidConfigGroup {
+            uuids: BTreeSet::from_iter(vec.into_iter().map(|s| String::from(s))),
+            configs: HashMap::new(),
+        }
+    }
+
+    let mut groups: Vec<ValidConfigGroup> = configs.into_iter().map(|vec| convert(vec)).collect();
+    groups.sort();
+    let group_uuids: Vec<BTreeSet<String>> = groups.iter().map(|vcg| vcg.uuids.clone()).collect();
+    assert_eq!(
+        format!("{:?}", group_uuids),
+        r#"[{"a", "b", "c"}, {"a", "b"}, {"a", "c"}, {"a"}, {"b"}, {"c"}]"#
+    );
 }

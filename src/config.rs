@@ -524,6 +524,16 @@ fn test_deserialization() {
         }
     );
 
+    match ron::de::from_str::<'static, Config>("(uuid: \"abcdef1234\", rotation:45)") {
+        Err(e) => {
+            // Validate expected error message.
+            assert!(
+                format!("{}", e).contains("invalid value: 45, expected one of: 0, 90, 180, 270")
+            );
+        }
+        Ok(_) => panic!("Deserialization should have failed."),
+    }
+
     let cg: ConfigGroup = serde_json::de::from_str("[{\"uuid\":\"abcdef1234\"}]")
         .expect("Deserialization should not fail");
     assert_eq!(
