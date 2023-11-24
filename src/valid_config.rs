@@ -1,7 +1,9 @@
-///! This module provides a data structure that is allows for more efficient
-/// access to a configuration group that has been validated as being
-/// semantically consistent.  That is, it doesn't have duplicate displays
-/// and is non-empty.
+//! This module provides a data structure that is allows for more efficient
+//! access to a configuration group that has been validated as being
+//! semantically consistent.  That is, it doesn't have duplicate displays
+//! and is non-empty.
+
+use std::collections::hash_map::Entry;
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use std::cmp::{Eq, Ord, Ordering, PartialEq, PartialOrd};
@@ -33,11 +35,7 @@ impl std::fmt::Display for Error {
                     f,
                     "A configuration group contains a configuration for \
                 the same display more than once: {}",
-                    uuids
-                        .into_iter()
-                        .cloned()
-                        .collect::<Vec<String>>()
-                        .join(", ")
+                    uuids.iter().cloned().collect::<Vec<String>>().join(", ")
                 )
             }
             Error::DuplicateGroups(configs) => {
@@ -140,11 +138,11 @@ impl ValidConfigGroup {
         let mut configs = HashMap::new();
 
         for config in cg.configs {
-            let uuid = config.uuid.clone();
-            if configs.contains_key(&uuid) {
-                duplicates.insert(uuid);
+            let uuid = &config.uuid;
+            if let Entry::Vacant(e) = configs.entry(uuid.clone()) {
+                e.insert(config);
             } else {
-                configs.insert(uuid, config);
+                duplicates.insert(uuid.clone());
             }
         }
 
@@ -419,12 +417,12 @@ fn test_config_group_sorting() {
 
     fn convert(vec: Vec<&str>) -> ValidConfigGroup {
         ValidConfigGroup {
-            uuids: BTreeSet::from_iter(vec.into_iter().map(|s| String::from(s))),
+            uuids: BTreeSet::from_iter(vec.into_iter().map(String::from)),
             configs: HashMap::new(),
         }
     }
 
-    let mut groups: Vec<ValidConfigGroup> = configs.into_iter().map(|vec| convert(vec)).collect();
+    let mut groups: Vec<ValidConfigGroup> = configs.into_iter().map(convert).collect();
     groups.sort();
     let group_uuids: Vec<BTreeSet<String>> = groups.iter().map(|vcg| vcg.uuids.clone()).collect();
     assert_eq!(

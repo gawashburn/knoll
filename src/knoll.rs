@@ -14,6 +14,7 @@ use crate::config::*;
 use crate::core_graphics;
 use crate::displays;
 use crate::displays::*;
+use crate::serde::serialize_to_string;
 use crate::valid_config;
 use crate::valid_config::*;
 
@@ -28,12 +29,11 @@ pub enum Error {
     Utf8(std::string::FromUtf8Error),
     Serde(crate::serde::Error),
     Duration(humantime::DurationError),
-    LogInit(log::SetLoggerError),
+    LogInit(SetLoggerError),
 
     // TODO For these errors fall back to storing the configuration as a
     //   string because we cannot thread the configured serialization
-    //   format through `std::fmt::Display`.  However, we could in the
-    //   future include the configured format as part of the error.
+    //   format through `std::fmt::Display`.
     NoMatchingConfigGroup(Vec<String>),
     NoMatchingDisplayMode(String),
     AmbiguousDisplayMode(Vec<String>),
@@ -76,8 +76,8 @@ impl From<humantime::DurationError> for Error {
     }
 }
 
-impl From<log::SetLoggerError> for Error {
-    fn from(e: log::SetLoggerError) -> Self {
+impl From<SetLoggerError> for Error {
+    fn from(e: SetLoggerError) -> Self {
         Error::LogInit(e)
     }
 }
@@ -95,7 +95,7 @@ impl std::fmt::Display for Error {
             NoMatchingConfigGroup(uuids) => {
                 write!(
                     f,
-                    "No configuration group matches the currently attached displays: {}.",
+                    "No configuration group matches these currently attached displays: {}.",
                     uuids.join(", ")
                 )
             }
@@ -218,7 +218,7 @@ pub fn run<
             // Calling unwrap here should be okay, as there is a default value.
             let wait_string = sub_matches.get_one::<String>("WAIT").unwrap();
             let wait_period = humantime::parse_duration(wait_string)?;
-            daemon_command::<DS>(config_reader, wait_period)
+            daemon_command::<DS>(config_reader, format, wait_period)
         }
         Some(("list", sub_matches)) => {
             info!("List mode selected.");
@@ -364,7 +364,7 @@ impl ConfigReader {
 
         // If the input is empty return no configuration groups, as
         // deserialization will fail.
-        if self.config_string.len() == 0 {
+        if self.config_string.is_empty() {
             return Ok(vec![]);
         }
 
@@ -396,10 +396,11 @@ fn open_output<'l, OUT: Write + 'l>(
 ////////////////////////////////////////////////////////////////////////////////
 
 /// Helper find the configuration group for the current display state.
-/// TODO Detect when configuration change would be a no-op.
+// TODO Detect when configuration change would be a no-op.
 fn find_most_precise_config_group<DS: DisplayState>(
     vcgs: &[ValidConfigGroup],
     display_state: &DS,
+    format: crate::serde::Format,
 ) -> Result<ValidConfigGroup, Error> {
     let displays = display_state.get_displays();
     let num_displays = displays.len();
@@ -430,17 +431,21 @@ fn find_most_precise_config_group<DS: DisplayState>(
     // No matching configurations
     if best_len == 0 {
         Err(Error::NoMatchingConfigGroup(
-            // TODO
             displays.keys().cloned().collect(),
         ))
     }
     // Ambiguous configurations.
     else if matching.len() > 1 {
-        // TODO Should use selected serialization format rather the debug
-        //   format.
-        Err(Error::AmbiguousConfigGroup(
-            matching.into_iter().map(|cg| format!("{:?}", cg)).collect(),
-        ))
+        // TODO A little annoying that it is necessary to use a loop rather
+        // than mapping so that ? can be used.
+        let mut cg_strs = Vec::new();
+        for vcg in matching {
+            let cg = ConfigGroup {
+                configs: vcg.configs.values().cloned().collect(),
+            };
+            cg_strs.push(serialize_to_string(format, &cg)?)
+        }
+        Err(Error::AmbiguousConfigGroup(cg_strs))
     } else {
         // Okay to unwrap here as we have verified that there is
         // at least one match.
@@ -466,19 +471,25 @@ fn mode_pattern_from_config(config: &Config) -> DisplayModePattern {
 /// using the requested configuration.
 /// Will fail if there is no matching display mode, or if the configuration
 /// does not uniquely determine a display mode.
-fn select_mode<D: Display>(display: &D, config: &Config) -> Result<D::DisplayModeType, Error> {
+fn select_mode<D: Display>(
+    display: &D,
+    config: &Config,
+    format: crate::serde::Format,
+) -> Result<D::DisplayModeType, Error> {
     let pattern = mode_pattern_from_config(config);
     let mut modes = display.matching_modes(&pattern);
     if modes.is_empty() {
-        // TODO Should use selected serialization format rather the debug
-        //   format.
-        Err(Error::NoMatchingDisplayMode(format!("{:?}", config)))
+        Err(Error::NoMatchingDisplayMode(serialize_to_string(
+            format, &config,
+        )?))
     } else if modes.len() > 1 {
-        // TODO Should use selected serialization format rather the debug
-        //   format.
-        Err(Error::AmbiguousDisplayMode(
-            modes.into_iter().map(|m| format!("{:?}", m)).collect(),
-        ))
+        // TODO A little annoying that it is necessary to use a loop rather
+        // than mapping so that ? can be used.
+        let mut mode_strs = Vec::new();
+        for m in modes {
+            mode_strs.push(serialize_to_string(format, &m)?)
+        }
+        Err(Error::AmbiguousDisplayMode(mode_strs))
     } else {
         // The unwrap here is safe we as we've established that set of matching
         // modes is non-empty.
@@ -492,6 +503,7 @@ fn select_mode<D: Display>(display: &D, config: &Config) -> Result<D::DisplayMod
 fn configure_displays<DS: DisplayState>(
     display_state: &DS,
     config_group: ValidConfigGroup,
+    format: crate::serde::Format,
 ) -> Result<(), Error> {
     // Determine that we can find appropriate display modes for each
     // configuration before we start configuring.
@@ -501,8 +513,12 @@ fn configure_displays<DS: DisplayState>(
             .get_displays()
             .get(uuid)
             .expect("Match display somehow missing display configuration");
-        let mode = select_mode(display, config)?;
-        debug!("Selected mode {:?}", mode);
+        let mode = select_mode(display, config, format)?;
+        info!(
+            "For display {}, selected mode {}",
+            &uuid,
+            serialize_to_string(format, &mode)?
+        );
         selected_modes.insert(uuid.clone(), mode);
     }
 
@@ -581,8 +597,8 @@ fn pipeline_command<DS: DisplayState>(
 
     // If there are any configuration groups, attempt to apply them.
     if !config_groups.is_empty() {
-        let chosen_config = find_most_precise_config_group(&config_groups, &display_state)?;
-        configure_displays(&display_state, chosen_config)?;
+        let chosen_config = find_most_precise_config_group(&config_groups, &display_state, format)?;
+        configure_displays(&display_state, chosen_config, format)?;
         // Update the display state with any changes that were applied.
         display_state = DS::current()?;
     }
@@ -641,21 +657,17 @@ fn list_command<DS: DisplayState>(
 static RECONFIGURE_LOCK: Mutex<bool> = Mutex::new(false);
 static RECONFIGURE_CONDVAR: Condvar = Condvar::new();
 
-fn daemon_command<'l, DS: DisplayState>(
+fn daemon_command<DS: DisplayState>(
     mut config_reader: ConfigReader,
+    format: crate::serde::Format,
     wait_period: std::time::Duration,
 ) -> Result<(), Error> {
     extern "C" fn recon_callback() {
-        match RECONFIGURE_LOCK.try_lock() {
-            Ok(ref mut reconfig_started) => {
-                **reconfig_started = true;
-                // Signal to the worker thread to wake up and perform
-                // the reconfiguration.
-                RECONFIGURE_CONDVAR.notify_one();
-            }
-            _ => {
-                // No-op, as reconfiguration is already taking place.
-            }
+        if let Ok(ref mut reconfig_started) = RECONFIGURE_LOCK.try_lock() {
+            **reconfig_started = true;
+            // Signal to the worker thread to wake up and perform
+            // the reconfiguration.
+            RECONFIGURE_CONDVAR.notify_one();
         }
     }
 
@@ -697,9 +709,15 @@ fn daemon_command<'l, DS: DisplayState>(
                     DS::current()
                         .map_err(|e| e.into())
                         .and_then(|display_state: DS| {
-                            find_most_precise_config_group(&config_groups, &display_state).and_then(
+                            let current_config = state_to_config(&display_state);
+                            let config_str = serialize_to_string(format, &current_config).expect(
+                                "Should be impossible to fail on serializing internally constructed configuration.",
+                            );
+                            info!("Current display state:\n{}", config_str);
+
+                            find_most_precise_config_group(&config_groups, &display_state, format).and_then(
                                 |config_group: ValidConfigGroup| {
-                                    configure_displays(&display_state, config_group)
+                                    configure_displays(&display_state, config_group, format)
                                 },
                             )
                         })

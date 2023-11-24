@@ -60,7 +60,7 @@ impl PartialEq for RealDisplayMode {
 
 impl Eq for RealDisplayMode {}
 
-/// TODO Only for debugging modes with seemingly identical properties.
+// TODO Only for debugging modes with seemingly identical properties.
 impl Hash for RealDisplayMode {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.scaled.hash(state);
@@ -321,8 +321,8 @@ pub fn undo_display_rotation(point: Point, rotation: Rotation) -> Point {
 
 impl RealDisplay {
     /// Obtain a unique identifying name for the given display.
-    /// TODO Perform some additional testing to see this remains "persistent"
-    /// for identical model displays.
+    // TODO Perform some additional testing to see this remains "persistent"
+    //  for identical model displays.
     fn compute_uuid(display_id: DisplayID) -> String {
         // Use CoreGraphics UUID API.  I've already determined that for
         // some of dual displays that the manufacturer doesn't report a
@@ -471,7 +471,7 @@ impl Display for RealDisplay {
     }
 
     fn possible_modes(&self) -> &[Self::DisplayModeType] {
-        &self.modes.as_slice()
+        self.modes.as_slice()
     }
 }
 

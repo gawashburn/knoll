@@ -132,7 +132,7 @@ impl DisplayConfigTransaction for FakeDisplayConfigTransaction {
                 }
                 None => {
                     self.dropped = true;
-                    return Err(Error::UnknownUUID(String::from(uuid)));
+                    return Err(Error::UnknownUUID(uuid));
                 }
             }
         }
@@ -209,7 +209,7 @@ impl Display for FakeDisplay {
     }
 
     fn possible_modes(&self) -> &[Self::DisplayModeType] {
-        &self.modes.as_slice()
+        self.modes.as_slice()
     }
 }
 

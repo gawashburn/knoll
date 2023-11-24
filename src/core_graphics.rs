@@ -301,7 +301,7 @@ extern "C" {
         user_info: *mut c_void,
     ) -> CGError;
 
-    // TODO Callbacks do not appear to leak if process exists, but might good
+    // TODO Callbacks do not appear to leak if process exits, but might good
     //   to clean up?  Need to determine appropriate location to call.
     // CGDisplayRemoveReconfigurationCallback
 
@@ -439,7 +439,7 @@ pub fn cg_display_modes_at_index(modes: CGDisplayModeArray, idx: CFIndex) -> CGD
 pub fn cg_display_copy_display_mode(display_id: DisplayID) -> Option<CGDisplayModeRef> {
     unsafe {
         let mode = CGDisplayCopyDisplayMode(display_id.id);
-        if mode != null() {
+        if !mode.is_null() {
             Some(mode)
         } else {
             None
@@ -481,7 +481,7 @@ pub fn cg_display_mode_is_usable_for_desktop_gui(mode: &CGDisplayModeRef) -> boo
 
 pub fn cg_begin_display_configuration() -> Result<CGDisplayConfigRef, CGError> {
     unsafe {
-        let mut config_ref: CGDisplayConfigRef = std::ptr::null_mut();
+        let mut config_ref: CGDisplayConfigRef = null_mut();
         let error = CGBeginDisplayConfiguration(&mut config_ref);
         match error {
             CGError::success => Ok(config_ref),
@@ -547,7 +547,7 @@ pub fn cg_configure_display_mirror_of_display(
 }
 
 pub fn cg_display_register_reconfiguration_callback(cb: extern "C" fn()) -> CGError {
-    unsafe { CGDisplayRegisterReconfigurationCallback(cb, std::ptr::null_mut()) }
+    unsafe { CGDisplayRegisterReconfigurationCallback(cb, null_mut()) }
 }
 
 pub fn ns_application_load() -> bool {
@@ -598,13 +598,13 @@ pub fn cgs_configure_display_enabled(
 }
 
 /// Helper to set the rotation of a display via the MPDisplay Objective-C class.
-/// TODO As this is the only use of Objective-C in this code-base,
-///   in the future it may be worth investigate the private
-///   `CGSSetDisplayRotation` function instead.  Its existence is
-///   referenced here: https://github.com/NUIKit/CGSInternal/issues/3
-///   but there is no documentation of what its expected function
-///   prototype would be.  So some further detective work will be
-///   necessary.
+// TODO As this is the only use of Objective-C in this code-base,
+//   in the future it may be worth investigate the private
+//   `CGSSetDisplayRotation` function instead.  Its existence is
+//   referenced here: https://github.com/NUIKit/CGSInternal/issues/3
+//   but there is no documentation of what its expected function
+//   prototype would be.  So some further detective work will be
+//   necessary.
 pub fn mpd_set_rotation(display_id: DisplayID, rotation: i32) {
     // https://github.com/phatblat/macOSPrivateFrameworks/tree/9047371eb80f925642c8a7c4f1e00095aec66044/PrivateFrameworks/MonitorPanel
     unsafe {

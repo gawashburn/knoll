@@ -11,6 +11,7 @@ pub enum Error {
     SerRon(ron::error::Error),
     DeJson(serde_json::Error),
     SerJson(serde_json::Error),
+    Utf8Conversion(std::string::FromUtf8Error),
     UnsupportedFormat(String),
 }
 
@@ -31,6 +32,9 @@ impl std::fmt::Display for Error {
             SerJson(e) => {
                 write!(f, "JSON serialization error: {}", e)
             }
+            Utf8Conversion(e) => {
+                write!(f, "Error converting from UTF-8 to string format: {}", e)
+            }
             UnsupportedFormat(fs) => {
                 write!(f, "Unsupported format: {}", fs)
             }
@@ -47,6 +51,12 @@ impl From<ron::error::SpannedError> for Error {
 impl From<ron::error::Error> for Error {
     fn from(e: ron::error::Error) -> Self {
         Error::SerRon(e)
+    }
+}
+
+impl From<std::string::FromUtf8Error> for Error {
+    fn from(e: std::string::FromUtf8Error) -> Self {
+        Error::Utf8Conversion(e)
     }
 }
 
@@ -80,11 +90,18 @@ pub fn serialize<S: Serialize, W: Write>(format: Format, s: &S, writer: W) -> Re
             let pretty_config = ron::ser::PrettyConfig::new();
             ron::ser::to_writer_pretty(writer, s, pretty_config)?
         }
-        Format::Json => {
-            serde_json::ser::to_writer_pretty(writer, s).map_err(|e| Error::SerJson(e))?
-        }
+        Format::Json => serde_json::ser::to_writer_pretty(writer, s).map_err(Error::SerJson)?,
     }
     Ok(())
+}
+
+/// Helper to abstract over serialization to a String, parameterized by the selected
+/// data format.
+pub fn serialize_to_string<S: Serialize>(format: Format, s: &S) -> Result<String, Error> {
+    let mut vec: Vec<u8> = Vec::new();
+    serialize(format, s, &mut vec)?;
+    let str = String::from_utf8(vec)?;
+    Ok(str)
 }
 
 /// Helper to abstract over deserialization, parameterized by the selected
@@ -92,6 +109,6 @@ pub fn serialize<S: Serialize, W: Write>(format: Format, s: &S, writer: W) -> Re
 pub fn deserialize<'a, D: Deserialize<'a>>(format: Format, str: &'a str) -> Result<D, Error> {
     Ok(match format {
         Format::Ron => ron::de::from_str(str)?,
-        Format::Json => serde_json::from_str(str).map_err(|e| Error::DeJson(e))?,
+        Format::Json => serde_json::from_str(str).map_err(Error::DeJson)?,
     })
 }

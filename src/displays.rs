@@ -39,12 +39,9 @@ impl Rotation {
     /// Create a `Rotation` from an angle.  If the angle does not correspond
     /// to one of the defined rotations, `None` is returned.
     pub fn from(angle: f64) -> Option<Self> {
-        for rotation in Rotation::VALUES {
-            if angle == rotation.angle() {
-                return Some(rotation);
-            }
-        }
-        None
+        Rotation::VALUES
+            .into_iter()
+            .find(|&rotation| angle == rotation.angle())
     }
 }
 
@@ -58,7 +55,7 @@ impl Rotation {
 pub struct Point {
     /// The location along the X-axis, or a width.
     pub x: i64,
-    /// The location along the Y-axid, or a height.
+    /// The location along the Y-axis, or a height.
     pub y: i64,
 }
 
@@ -67,16 +64,21 @@ pub struct Point {
 #[derive(Debug, Clone)]
 pub enum Error {
     /// Reported when attempting to reference a display by an invalid UUID.
+    /// The argument is the UUID.
     UnknownUUID(String),
-    /// TODO
+    /// Error reported when a configuration request for a given display is
+    /// made a against a DisplayTransaction more than once.
+    /// The argument is the UUID.
     DuplicateConfiguration(String),
     /// Reported when a configuration operation is attempted on an
     /// invalid DisplayConfigTransaction.
     InvalidTransactionState,
     /// Reported if there is some underlying locking error.
+    /// The argument is the error message.
     Poisoned(String),
     /// A failure arising from interaction with the underlying operating
     /// system.
+    /// The argument is the error message.
     Internal(String),
 }
 
@@ -90,7 +92,14 @@ impl std::fmt::Display for Error {
                     uuid
                 )
             }
-            Error::DuplicateConfiguration(_) => todo!(),
+            Error::DuplicateConfiguration(uuid) => {
+                write!(
+                    f,
+                    "Attempted to change a setting more than once on display \
+                    with UUID {}",
+                    uuid
+                )
+            }
             Error::InvalidTransactionState => {
                 write!(
                     f,
@@ -138,9 +147,9 @@ pub trait DisplayMode: Clone + std::fmt::Debug + Serialize {
 }
 
 /// A `DisplayModePattern` specifies a space of possible `DisplayModes`.
-/// TODO We could consider extending the constraints allowed by patterns,
-///   but it would eliminate some of the symmetry between the input and output
-///   formats.
+// TODO We could consider extending the constraints allowed by patterns,
+//   but it would eliminate some of the symmetry between the input and output
+//   formats.
 #[derive(Debug, Clone)]
 pub struct DisplayModePattern {
     /// Should this pattern match on whether the display mode is scaled?
@@ -172,9 +181,9 @@ pub trait Display: std::fmt::Debug {
     fn rotation(&self) -> Rotation;
 
     /// The type of the display mode associated with this Display.
-    /// TODO Perhaps in the future we could more tightly couple this with
-    ///   something akin to path dependent types.  For now dynamically check
-    ///   that DisplayModes are not used with the incorrect display.
+    // TODO Perhaps in the future we could more tightly couple this with
+    //   something akin to path dependent types.  For now dynamically check
+    //   that DisplayModes are not used with the incorrect display.
     type DisplayModeType: DisplayMode;
 
     /// Obtain the currently configured. display mode.
