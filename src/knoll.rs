@@ -21,8 +21,9 @@ use crate::valid_config::*;
 ////////////////////////////////////////////////////////////////////////////////
 
 /// Representation of all the possible failure modes.
+#[derive(Debug)]
 pub enum Error {
-    NoConfigGroups,
+    // Wrapper errors.
     Config(valid_config::Error),
     Displays(displays::Error),
     Io(std::io::Error),
@@ -31,6 +32,8 @@ pub enum Error {
     Duration(humantime::DurationError),
     LogInit(SetLoggerError),
 
+    // knoll module errors.
+    NoConfigGroups,
     // TODO For these errors fall back to storing the configuration as a
     //   string because we cannot thread the configured serialization
     //   format through `std::fmt::Display`.
@@ -38,6 +41,22 @@ pub enum Error {
     NoMatchingDisplayMode(String),
     AmbiguousDisplayMode(Vec<String>),
     AmbiguousConfigGroup(Vec<String>),
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        use crate::knoll::Error::*;
+        match self {
+            Config(e) => Some(e),
+            Displays(e) => Some(e),
+            Io(e) => Some(e),
+            Utf8(e) => Some(e),
+            Serde(e) => Some(e),
+            Duration(e) => Some(e),
+            LogInit(e) => Some(e),
+            _ => None,
+        }
+    }
 }
 
 impl From<valid_config::Error> for Error {

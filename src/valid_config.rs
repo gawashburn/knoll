@@ -15,6 +15,7 @@ use crate::config::*;
 ////////////////////////////////////////////////////////////////////////////////
 
 /// The possible errors that can ar
+#[derive(Debug)]
 pub enum Error {
     /// Reported when a configuration group contains a display with the same
     /// UUID multiple times.  The argument is a set of the UUIDs that
@@ -61,6 +62,12 @@ impl std::fmt::Display for Error {
             }
             Error::EmptyGroup => write!(f, "A configuration group is empty."),
         }
+    }
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
     }
 }
 

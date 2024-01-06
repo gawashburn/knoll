@@ -42,6 +42,20 @@ impl std::fmt::Display for Error {
     }
 }
 
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        use Error::*;
+        match self {
+            DeRon(e) => Some(e),
+            SerRon(e) => Some(e),
+            DeJson(e) => Some(e),
+            SerJson(e) => Some(e),
+            Utf8Conversion(e) => Some(e),
+            UnsupportedFormat(_) => None,
+        }
+    }
+}
+
 impl From<ron::error::SpannedError> for Error {
     fn from(e: ron::error::SpannedError) -> Self {
         Error::DeRon(e)

@@ -115,6 +115,12 @@ impl std::fmt::Display for Error {
     }
 }
 
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 /// A representation of one a possible `Display` configuration state.
