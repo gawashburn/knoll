@@ -131,6 +131,13 @@ pub enum CFStringBuiltInEncodings {
     UTF8 = 134217984,
 }
 
+/// Implement From to expose a safer conversion.
+impl From<CFStringBuiltInEncodings> for CFStringEncoding {
+    fn from(value: CFStringBuiltInEncodings) -> Self {
+        value as Self
+    }
+}
+
 // TODO Add values or remove these constants ?
 // kCGNullDirectDisplay
 // kDisplayProductIDGeneric

@@ -21,7 +21,7 @@ use crate::displays::*;
 pub fn cg_error_to_error(cg_error: CGError, context: &str) -> Error {
     assert_ne!(cg_error, CGError::success);
 
-    Error::Internal(String::from(context))
+    Error::Internal(context.to_owned())
 }
 
 /// Helper to lift a `CGError` to an `display::Error` by providing some additional
@@ -81,11 +81,14 @@ impl RealDisplayMode {
             display_id,
             mode: mode_desc.mode,
             scaled: mode_desc.scale > 1.0,
+            // TODO u32 does not have From for usize, apparently just in case
+            //   a 16-bit platform is the target.  Revise when infallible
+            //   try_from might be standard here?
             color_depth: mode_desc.depth as usize,
-            frequency: mode_desc.freq as usize,
+            frequency: mode_desc.freq.into(),
             extents: Point {
-                x: mode_desc.width as i64,
-                y: mode_desc.height as i64,
+                x: mode_desc.width.into(),
+                y: mode_desc.height.into(),
             },
         }
     }
@@ -156,7 +159,7 @@ impl RealDisplayConfigTransaction {
         self.displays
             .get(uuid)
             .cloned()
-            .ok_or(Error::UnknownUUID(String::from(uuid)))
+            .ok_or(Error::UnknownUUID(uuid.to_owned()))
     }
 
     /// Cleaning up after beginning configuration will consume the
@@ -201,7 +204,7 @@ impl DisplayConfigTransaction for RealDisplayConfigTransaction {
         let display_id = self.display_id(uuid)?;
 
         if self.rotations.contains_key(&display_id) {
-            return Err(Error::DuplicateConfiguration(String::from(uuid)));
+            return Err(Error::DuplicateConfiguration(uuid.to_owned()));
         }
 
         // Keep track of applied rotations and queue them up, so that
@@ -272,7 +275,7 @@ impl DisplayConfigTransaction for RealDisplayConfigTransaction {
         )?;
 
         for (&display_id, &rotation) in &self.rotations {
-            mpd_set_rotation(display_id, rotation as i32)
+            mpd_set_rotation(display_id, rotation.into())
         }
 
         self.dropped = true;
@@ -333,7 +336,7 @@ impl RealDisplay {
         if !cf_string_get_cstring(
             cfstring,
             &mut buffer,
-            CFStringBuiltInEncodings::ASCII as CFStringEncoding,
+            CFStringBuiltInEncodings::ASCII.into(),
         ) {
             // It seems reasonable to panic here, as the UUID has a fixed
             // format and length.
@@ -367,7 +370,7 @@ impl RealDisplay {
 
         // Obtain the current display rotation for normalizing the modes.
         let float_rotation = cg_display_rotation(display_id);
-        let rotation = Rotation::from(float_rotation)
+        let rotation = Rotation::try_from(float_rotation)
             .expect(format!("Unexpected display rotation angle: {}", float_rotation).as_str());
 
         let mut current_mode_num = 0;
@@ -437,6 +440,7 @@ impl RealDisplay {
             uuid,
             enabled,
             origin: Point {
+                // TODO Could not find a safer more idiomatic way of converting?
                 x: cg_point.x as i64,
                 y: cg_point.y as i64,
             },
@@ -501,6 +505,9 @@ impl DisplayState for RealDisplayState {
         );
 
         let mut displays = Vec::new();
+        // TODO u32 does not have From for usize, apparently just in case
+        //   a 16-bit platform is the target.  Revise when infallible
+        //   try_from might be standard here?
         for id in display_ids.into_iter().take(num_displays as usize) {
             displays.push(RealDisplay::new(id)?);
         }

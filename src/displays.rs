@@ -30,18 +30,33 @@ impl Rotation {
         use Rotation::*;
         [Zero, Ninety, OneEighty, TwoSeventy]
     };
+}
 
-    /// Convert a `Rotation` to its angle.
-    pub fn angle(&self) -> f64 {
-        (*self as usize) as f64
+impl From<Rotation> for f64 {
+    fn from(value: Rotation) -> Self {
+        (value as i16) as f64
     }
+}
 
-    /// Create a `Rotation` from an angle.  If the angle does not correspond
-    /// to one of the defined rotations, `None` is returned.
-    pub fn from(angle: f64) -> Option<Self> {
+impl From<Rotation> for i32 {
+    fn from(value: Rotation) -> Self {
+        value as i32
+    }
+}
+
+impl TryFrom<f64> for Rotation {
+    type Error = String;
+    fn try_from(value: f64) -> Result<Self, Self::Error> {
         Rotation::VALUES
             .into_iter()
-            .find(|&rotation| angle == rotation.angle())
+            .find(|&rotation| {
+                let fvalue: f64 = rotation.into();
+                value == fvalue
+            })
+            .ok_or(format!(
+                "{} is not currently an allowed Rotation value.",
+                value
+            ))
     }
 }
 

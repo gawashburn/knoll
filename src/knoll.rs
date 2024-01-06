@@ -223,7 +223,7 @@ pub fn run<
     };
 
     // Set up logging.
-    let verbosity = matches.get_count("VERBOSITY") as usize;
+    let verbosity = matches.get_count("VERBOSITY").into();
     configure_logger(verbosity, stderr)?;
 
     // Check to see which program mode should be used.

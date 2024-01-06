@@ -162,7 +162,7 @@ pub struct ConfigGroups {
 fn test_serialization() {
     let c1 = Config::default();
     let c2 = Config {
-        uuid: String::from("ab3456def"),
+        uuid: "ab3456def".to_owned(),
         enabled: Some(true),
         origin: Some(Point { x: 1, y: 2 }),
         extents: Some(Point { x: 3, y: 6 }),
@@ -415,7 +415,7 @@ fn test_deserialization() {
     assert_eq!(
         c,
         Config {
-            uuid: String::from("abcdef1234"),
+            uuid: "abcdef1234".to_owned(),
             enabled: None,
             origin: None,
             extents: None,
@@ -432,7 +432,7 @@ fn test_deserialization() {
     assert_eq!(
         c,
         Config {
-            uuid: String::from("abcdef1234"),
+            uuid: "abcdef1234".to_owned(),
             enabled: Some(false),
             origin: Some(Point { x: 1, y: 2 }),
             extents: None,
@@ -448,7 +448,7 @@ fn test_deserialization() {
     assert_eq!(
         c,
         Config {
-            uuid: String::from("abcdef123"),
+            uuid: "abcdef123".to_owned(),
             enabled: Some(true),
             origin: None,
             extents: None,
@@ -464,7 +464,7 @@ fn test_deserialization() {
     assert_eq!(
         c,
         Config {
-            uuid: String::from("abcdef1234"),
+            uuid: "abcdef1234".to_owned(),
             enabled: None,
             origin: None,
             extents: None,
@@ -480,7 +480,7 @@ fn test_deserialization() {
     assert_eq!(
         c,
         Config {
-            uuid: String::from("abcdef1234"),
+            uuid: "abcdef1234".to_owned(),
             enabled: Some(false),
             origin: None,
             extents: None,
@@ -496,7 +496,7 @@ fn test_deserialization() {
     assert_eq!(
         c,
         Config {
-            uuid: String::from("abcdef1234"),
+            uuid: "abcdef1234".to_owned(),
             enabled: None,
             origin: Some(Point { x: 1, y: 2 }),
             extents: None,
@@ -513,7 +513,7 @@ fn test_deserialization() {
     assert_eq!(
         c,
         Config {
-            uuid: String::from("abcdef1234"),
+            uuid: "abcdef1234".to_owned(),
             enabled: Some(false),
             origin: Some(Point { x: 0, y: 1 }),
             extents: None,
@@ -540,7 +540,7 @@ fn test_deserialization() {
         cg,
         ConfigGroup {
             configs: vec![Config {
-                uuid: String::from("abcdef1234"),
+                uuid: "abcdef1234".to_owned(),
                 enabled: None,
                 origin: None,
                 extents: None,
@@ -558,7 +558,7 @@ fn test_deserialization() {
         cg,
         ConfigGroup {
             configs: vec![Config {
-                uuid: String::from("abcdef1234"),
+                uuid: "abcdef1234".to_owned(),
                 enabled: None,
                 origin: Some(Point { x: 1, y: 2 }),
                 extents: None,
@@ -577,7 +577,7 @@ fn test_deserialization() {
         ConfigGroups {
             groups: vec![ConfigGroup {
                 configs: vec![Config {
-                    uuid: String::from("abcdef1234"),
+                    uuid: "abcdef1234".to_owned(),
                     enabled: None,
                     origin: Some(Point { x: 1, y: 2 }),
                     extents: None,

@@ -45,7 +45,7 @@ impl std::fmt::Display for Error {
                     .iter()
                     .map(|vc| {
                         let uuids = vc.uuids.iter().cloned().collect::<Vec<String>>().join(", ");
-                        let mut group = String::from("[");
+                        let mut group = "[".to_owned();
                         group.push_str(uuids.as_str());
                         group.push(']');
                         group
@@ -188,7 +188,7 @@ fn test_valid_config_from_duplicate() {
     match ValidConfigGroup::from(ConfigGroup {
         configs: vec![
             Config {
-                uuid: String::from("abcdef1234"),
+                uuid: "abcdef1234".to_owned(),
                 enabled: Some(false),
                 origin: None,
                 extents: None,
@@ -198,7 +198,8 @@ fn test_valid_config_from_duplicate() {
                 rotation: None,
             },
             Config {
-                uuid: String::from("abcdef1234"),
+                uuid: "abcdef1234".to_owned(),
+
                 enabled: Some(false),
                 origin: None,
                 extents: None,
@@ -220,7 +221,7 @@ fn test_valid_config_from_duplicate() {
     match ValidConfigGroup::from(ConfigGroup {
         configs: vec![
             Config {
-                uuid: String::from("abcdef1234"),
+                uuid: "abcdef1234".to_owned(),
                 enabled: Some(false),
                 origin: None,
                 extents: None,
@@ -230,7 +231,7 @@ fn test_valid_config_from_duplicate() {
                 rotation: None,
             },
             Config {
-                uuid: String::from("abcdef1234"),
+                uuid: "abcdef1234".to_owned(),
                 enabled: Some(false),
                 origin: None,
                 extents: None,
@@ -240,7 +241,8 @@ fn test_valid_config_from_duplicate() {
                 rotation: None,
             },
             Config {
-                uuid: String::from("foobarbaz"),
+                uuid: "foobarbaz".to_owned(),
+
                 enabled: Some(false),
                 origin: None,
                 extents: None,
@@ -250,7 +252,7 @@ fn test_valid_config_from_duplicate() {
                 rotation: None,
             },
             Config {
-                uuid: String::from("foobarbaz"),
+                uuid: "foobarbaz".to_owned(),
                 enabled: Some(false),
                 origin: None,
                 extents: None,
@@ -313,7 +315,7 @@ fn test_config_validation_duplicates() {
         groups: vec![
             ConfigGroup {
                 configs: vec![Config {
-                    uuid: String::from("abcdef1234"),
+                    uuid: "abcdef1234".to_owned(),
                     enabled: Some(false),
                     origin: None,
                     extents: None,
@@ -325,7 +327,7 @@ fn test_config_validation_duplicates() {
             },
             ConfigGroup {
                 configs: vec![Config {
-                    uuid: String::from("abcdef1234"),
+                    uuid: "abcdef1234".to_owned(),
                     enabled: Some(false),
                     origin: None,
                     extents: None,
@@ -352,7 +354,7 @@ fn test_config_validation_duplicates() {
             ConfigGroup {
                 configs: vec![
                     Config {
-                        uuid: String::from("abcdef1234"),
+                        uuid: "abcdef1234".to_owned(),
                         enabled: Some(false),
                         origin: None,
                         extents: None,
@@ -362,7 +364,7 @@ fn test_config_validation_duplicates() {
                         rotation: None,
                     },
                     Config {
-                        uuid: String::from("foobarbaz"),
+                        uuid: "foobarbaz".to_owned(),
                         enabled: Some(false),
                         origin: None,
                         extents: None,
@@ -376,7 +378,7 @@ fn test_config_validation_duplicates() {
             ConfigGroup {
                 configs: vec![
                     Config {
-                        uuid: String::from("foobarbaz"),
+                        uuid: "foobarbaz".to_owned(),
                         enabled: Some(false),
                         origin: None,
                         extents: None,
@@ -386,7 +388,7 @@ fn test_config_validation_duplicates() {
                         rotation: None,
                     },
                     Config {
-                        uuid: String::from("abcdef1234"),
+                        uuid: "abcdef1234".to_owned(),
                         enabled: Some(false),
                         origin: None,
                         extents: None,

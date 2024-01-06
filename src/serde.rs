@@ -89,7 +89,7 @@ impl Format {
         match str {
             "ron" => Ok(Format::Ron),
             "json" => Ok(Format::Json),
-            fs => Err(Error::UnsupportedFormat(String::from(fs))),
+            fs => Err(Error::UnsupportedFormat(fs.to_owned())),
         }
     }
 }

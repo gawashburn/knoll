@@ -73,7 +73,7 @@ impl FakeDisplayConfigTransaction {
                 edits.push(edit);
                 Ok(())
             }
-            None => Err(Error::UnknownUUID(String::from(uuid))),
+            None => Err(Error::UnknownUUID(uuid.to_owned())),
         }
     }
 }
