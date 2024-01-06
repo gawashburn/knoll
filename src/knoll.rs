@@ -103,7 +103,7 @@ impl From<SetLoggerError> for Error {
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use Error::*;
+        use crate::knoll::Error::*;
 
         match self {
             NoConfigGroups => write!(
