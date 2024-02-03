@@ -21,7 +21,6 @@ pub enum Rotation {
     Ninety = 90,
     OneEighty = 180,
     TwoSeventy = 270,
-    // TODO inspect_err seems better here when available?
 }
 
 impl Rotation {
@@ -41,6 +40,12 @@ impl From<Rotation> for f64 {
 impl From<Rotation> for i32 {
     fn from(value: Rotation) -> Self {
         value as i32
+    }
+}
+
+impl std::fmt::Display for Rotation {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", (*self as i32))
     }
 }
 
@@ -72,6 +77,12 @@ pub struct Point {
     pub x: i64,
     /// The location along the Y-axis, or a height.
     pub y: i64,
+}
+
+impl std::fmt::Display for Point {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}, {})", self.x, self.y)
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

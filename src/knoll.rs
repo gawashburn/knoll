@@ -543,32 +543,35 @@ fn configure_displays<DS: DisplayState>(
 
     let mut cfg = display_state.configure()?;
     for (uuid, config) in &config_group.configs {
-        if config.enabled.is_some() {
+        if let Some(false) = config.enabled {
+            info!("For display {} has been disabled.", &uuid);
             // Unwrap is okay as we just checked that there is a value.
-            let enabled = config.enabled.unwrap();
             // TODO Use inspect_err to invoke cancel when it becomes available?
-            cfg.set_enabled(uuid, enabled)?;
+            cfg.set_enabled(uuid, false)?;
             // TODO Does it make sense to skip the rest?
-            if !enabled {
-                continue;
-            }
+            continue;
         }
 
         // TODO roll back rotation if later steps fail?
-        if config.rotation.is_some() {
+        if let Some(rotation) = config.rotation {
+            info!(
+                "For display {}, using rotation of {} degrees.",
+                &uuid, rotation
+            );
             // Unwrap is okay as we just checked that there is a value.
             // TODO Use inspect_err to invoke cancel when it becomes available?
-            cfg.set_rotation(uuid, config.rotation.unwrap())?
+            cfg.set_rotation(uuid, rotation)?
         }
 
         // Unwrap is safe as we know there is a display mode for each UUID.
         // TODO Use inspect_err to invoke cancel when it becomes available?
         cfg.set_mode(uuid, selected_modes.get(uuid).unwrap())?;
 
-        if config.origin.is_some() {
+        if let Some(origin) = &config.origin {
+            info!("For display {}, using {} as origin.", &uuid, origin);
             // Unwrap is okay as we just checked that there is a value.
             // TODO Use inspect_err to invoke cancel when it becomes available?
-            cfg.set_origin(uuid, config.origin.as_ref().unwrap())?
+            cfg.set_origin(uuid, origin)?
         }
     }
 
@@ -676,20 +679,23 @@ fn list_command<DS: DisplayState>(
 static RECONFIGURE_LOCK: Mutex<bool> = Mutex::new(false);
 static RECONFIGURE_CONDVAR: Condvar = Condvar::new();
 
+/// Helper to acquire the reconfiguration lock and notify the conditional
+/// variable.  It can also be used a callback for when displace notification
+/// changes.
+extern "C" fn triger_reconfig() {
+    if let Ok(ref mut reconfig_started) = RECONFIGURE_LOCK.try_lock() {
+        **reconfig_started = true;
+        // Signal to the worker thread to wake up and perform
+        // the reconfiguration.
+        RECONFIGURE_CONDVAR.notify_one();
+    }
+}
+
 fn daemon_command<DS: DisplayState>(
     mut config_reader: ConfigReader,
     format: crate::serde::Format,
     wait_period: std::time::Duration,
 ) -> Result<(), Error> {
-    extern "C" fn recon_callback() {
-        if let Ok(ref mut reconfig_started) = RECONFIGURE_LOCK.try_lock() {
-            **reconfig_started = true;
-            // Signal to the worker thread to wake up and perform
-            // the reconfiguration.
-            RECONFIGURE_CONDVAR.notify_one();
-        }
-    }
-
     // Spawn a thread to watch for reconfiguration changes.
     std::thread::spawn(move || 'loop_label: loop {
         let mut reconfig_in_progress = match RECONFIGURE_LOCK.lock() {
@@ -756,7 +762,13 @@ fn daemon_command<DS: DisplayState>(
         *reconfig_in_progress = false;
     });
 
-    core_graphics::cg_display_register_reconfiguration_callback(recon_callback);
+    // Install the display reconfiguration callback.
+    core_graphics::cg_display_register_reconfiguration_callback(triger_reconfig);
+
+    // Trigger an initial reconfiguration.  This is to handle the case that you
+    // have knoll running as a launchd service, and as macOS starts up your
+    // monitor configuration is incorrect even before knoll is started.
+    triger_reconfig();
 
     // macOS will not trigger the callback unless there is an application
     // loop running.
