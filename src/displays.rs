@@ -162,6 +162,7 @@ pub trait DisplayMode: Clone + std::fmt::Debug + Serialize {
     /// Return the color depth of the display mode in bits.
     fn color_depth(&self) -> usize;
     /// Return the refresh frequency of the display mode in Hertz.
+    /// Some displays may report a frequency of 0.
     fn frequency(&self) -> usize;
     /// Returns the display mode resolution in pixels.  Note this will
     /// be normalized independent of display rotation.  So this will

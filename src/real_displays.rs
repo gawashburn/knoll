@@ -19,7 +19,11 @@ use crate::displays::*;
 /// Helper for converting a `CGError` with a context string into a
 /// `display::Error`.  Should not be used when `CGError` is `success`.
 pub fn cg_error_to_error(cg_error: CGError, context: &str) -> Error {
-    assert_ne!(cg_error, CGError::success);
+    assert_ne!(
+        cg_error,
+        CGError::success,
+        "cg_error_to_error should not be used CGError::success"
+    );
 
     Error::Internal(context.to_owned())
 }
@@ -45,6 +49,7 @@ pub struct RealDisplayMode {
     mode: i32,
     pub scaled: bool,
     pub color_depth: usize,
+    /// Monitor refresh rate in Hz.  Some displays may report 0.
     pub frequency: usize,
     pub extents: Point,
 }
@@ -74,8 +79,12 @@ impl RealDisplayMode {
     /// Create a RealDisplayMode from a `DisplayID` and `core_graphics`
     /// mode description.
     fn new(display_id: DisplayID, mode_desc: CGSDisplayModeDescription) -> Self {
-        assert!(mode_desc.depth > 0, "Invalid color depth");
-        assert!(mode_desc.freq > 0, "Invalid frequency");
+        if mode_desc.depth == 0 {
+            warn!(
+                "Encountered a display mode with a bit depth of zero: {:?} {:?}",
+                display_id, mode_desc
+            );
+        }
 
         RealDisplayMode {
             display_id,

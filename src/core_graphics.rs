@@ -617,7 +617,11 @@ pub fn mpd_set_rotation(display_id: DisplayID, rotation: i32) {
     unsafe {
         let cls = class!(MPDisplay);
         let obj: *mut Object = objc::msg_send![cls, alloc];
-        assert_ne!(obj, null_mut());
+        assert_ne!(
+            obj,
+            null_mut(),
+            "Received a null pointer as a result of Objective-C message send."
+        );
         let _: () = objc::msg_send![obj, initWithCGSDisplayID:display_id.id];
         let _: () = objc::msg_send![obj, setOrientation:rotation];
     }

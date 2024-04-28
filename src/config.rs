@@ -16,7 +16,7 @@ where
     S: Serializer,
     T: Serialize,
 {
-    assert!(opt.is_some());
+    assert!(opt.is_some(), "serialize_opt should never receive None");
     opt.as_ref().unwrap().serialize(serializer)
 }
 
