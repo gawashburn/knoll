@@ -257,19 +257,6 @@ impl DisplayConfigTransaction for RealDisplayConfigTransaction {
         }
     }
 
-    fn cancel(mut self) -> Result<(), Error> {
-        if self.dropped {
-            return Err(Error::InvalidTransactionState);
-        }
-
-        cg_error_to_result(
-            cg_cancel_display_configuration(self.move_config()),
-            "While attempting to cancel the configuration transaction",
-        )?;
-        self.dropped = true;
-        Ok(())
-    }
-
     fn commit(mut self) -> Result<(), Error> {
         if self.dropped {
             return Err(Error::InvalidTransactionState);
@@ -297,7 +284,9 @@ impl Drop for RealDisplayConfigTransaction {
     /// fails to call `complete` or `cancel`.
     fn drop(&mut self) {
         if !self.dropped {
-            cg_cancel_display_configuration(self.move_config());
+            if cg_cancel_display_configuration(self.move_config()) != CGError::success {
+                error!("Failed to cancel the configuration transaction");
+            }
             self.dropped = true;
         }
     }

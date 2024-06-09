@@ -249,9 +249,9 @@ pub trait Display: std::fmt::Debug {
 /// It might have been more elegant from API perspective to allow a
 /// `DisplayConfigTransaction` allow returning a map of "ConfigurableDisplays"
 /// analogous to `DisplayState` instead of having all the operations take a
-/// UUID.  However, if we also want enforce that the transaction is used
-/// effectively linearly and consumed either by cancellation or completion,
-/// at best it requires non-trivial uses of references and lifetime
+/// UUID.  However, if we also want to enforce that the transaction is used
+/// effectively linearly and consumed either by committing or causing it to
+/// be dropped, at best it requires non-trivial uses of references and lifetime
 /// parameters.  
 pub trait DisplayConfigTransaction {
     /// The type of display modes that this transaction will accept.
@@ -274,9 +274,6 @@ pub trait DisplayConfigTransaction {
     /// completes, it will no longer register as attached.
     /// Will return an error if there is no display with the given UUID.
     fn set_enabled(&mut self, uuid: &str, enabled: bool) -> Result<(), Error>;
-
-    /// Cancel the pending changes in this transaction.
-    fn cancel(self) -> Result<(), Error>;
 
     /// Attempt to apply the requested configuration changes and close out
     /// the transaction.

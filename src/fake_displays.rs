@@ -104,14 +104,6 @@ impl DisplayConfigTransaction for FakeDisplayConfigTransaction {
         self.record_edit(uuid, FakeDisplayEdit::SetEnabled(enabled))
     }
 
-    fn cancel(mut self) -> Result<(), Error> {
-        if self.dropped {
-            return Err(Error::InvalidTransactionState);
-        }
-        self.dropped = true;
-        Ok(())
-    }
-
     fn commit(mut self) -> Result<(), Error> {
         if self.dropped {
             return Err(Error::InvalidTransactionState);

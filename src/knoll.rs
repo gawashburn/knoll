@@ -541,13 +541,12 @@ fn configure_displays<DS: DisplayState>(
         selected_modes.insert(uuid.clone(), mode);
     }
 
-    let mut cfg = display_state.configure()?;
+    let mut cfgtxn = display_state.configure()?;
     for (uuid, config) in &config_group.configs {
         if let Some(false) = config.enabled {
             info!("For display {} has been disabled.", &uuid);
             // Unwrap is okay as we just checked that there is a value.
-            // TODO Use inspect_err to invoke cancel when it becomes available?
-            cfg.set_enabled(uuid, false)?;
+            cfgtxn.set_enabled(uuid, false)?;
             // TODO Does it make sense to skip the rest?
             continue;
         }
@@ -559,23 +558,20 @@ fn configure_displays<DS: DisplayState>(
                 &uuid, rotation
             );
             // Unwrap is okay as we just checked that there is a value.
-            // TODO Use inspect_err to invoke cancel when it becomes available?
-            cfg.set_rotation(uuid, rotation)?
+            cfgtxn.set_rotation(uuid, rotation)?
         }
 
         // Unwrap is safe as we know there is a display mode for each UUID.
-        // TODO Use inspect_err to invoke cancel when it becomes available?
-        cfg.set_mode(uuid, selected_modes.get(uuid).unwrap())?;
+        cfgtxn.set_mode(uuid, selected_modes.get(uuid).unwrap())?;
 
         if let Some(origin) = &config.origin {
             info!("For display {}, using {} as origin.", &uuid, origin);
             // Unwrap is okay as we just checked that there is a value.
-            // TODO Use inspect_err to invoke cancel when it becomes available?
-            cfg.set_origin(uuid, origin)?
+            cfgtxn.set_origin(uuid, origin)?
         }
     }
 
-    Ok(cfg.commit()?)
+    Ok(cfgtxn.commit()?)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
