@@ -12,14 +12,31 @@ env:
 jobs:
   build:
     runs-on: macos-latest
+    environment: Coverage
 
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions-rs/toolchain@v1
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Select toolchain
+      uses: actions-rs/toolchain@v1
       with:
         toolchain: nightly
         override: true
+    - name: Test
     - uses: actions-rs/cargo@v1
       with:
         command: test
         args: --all-features --no-fail-fast
+      env:
+        CARGO_INCREMENTAL: '0'
+        RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests'
+        RUSTDOCFLAGS: '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests'
+    - name: Coverage report
+      id: coverage
+      uses: actions-rs/grcov@v0.1
+    - name: Coveralls upload
+      uses: coverallsapp/github-action@v2
+      with:
+        path-to-lcov: ${{ steps.coverage.outputs.report }}
+    
