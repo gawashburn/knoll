@@ -1,4 +1,4 @@
-name: Tests
+name: Testing
 
 on:
   push:
@@ -11,12 +11,15 @@ env:
 
 jobs:
   build:
-
     runs-on: [macos-latest, macos-15, macos-14]
 
     steps:
     - uses: actions/checkout@v4
-    - name: Build
-      run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly
+        override: true
+    - uses: actions-rs/cargo@v1
+      with:
+        command: test
+        args: --all-features --no-fail-fast
