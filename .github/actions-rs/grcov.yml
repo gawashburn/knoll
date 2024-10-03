@@ -3,6 +3,6 @@ branch: true
 llvm: true
 output-type: lcov
 ignore:
-  - "Users/*"
+  - "/Users/*"
 keep-only:
   - "src/*"
