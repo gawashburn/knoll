@@ -3,3 +3,5 @@ llvm: true
 output-type: lcov
 ignore:
   - "Users/*"
+keep-only:
+  - "src/*"
