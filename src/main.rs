@@ -1,3 +1,4 @@
+#![cfg_attr(all(coverage_nightly, test), feature(coverage_attribute))]
 // Objective-C is needed by the core_graphics module.
 // The core_graphics module also uses static_assertions to validate
 // some data structures at compile time.
