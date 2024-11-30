@@ -1,7 +1,8 @@
-///! Data structures used for representing the current state of the attached
-/// displays as well as requesting changes to that configuration.
 use crate::displays::Point;
 use crate::displays::Rotation;
+///! Data structures used for representing the current state of the attached
+/// displays as well as requesting changes to that configuration.
+use coverage_helper::test;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::{Eq, PartialEq};

@@ -2,7 +2,7 @@
 //! access to a configuration group that has been validated as being
 //! semantically consistent.  That is, it doesn't have duplicate displays
 //! and is non-empty.
-
+use coverage_helper::test;
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeSet, HashMap, HashSet};
 

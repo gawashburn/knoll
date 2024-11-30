@@ -1,5 +1,6 @@
 extern crate knoll;
 
+use coverage_helper::test;
 use knoll::knoll::run;
 use knoll::real_displays::*;
 use tempfile;
