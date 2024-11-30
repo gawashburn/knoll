@@ -2,6 +2,7 @@
 
 <p>
 <a href="https://crates.io/crates/knoll"><img src="https://img.shields.io/crates/v/knoll?style=flat-square" alt="Crates.io version" /></a>
+<a href="https://coveralls.io/github/gawashburn/knoll"><img src="https://coveralls.io/repos/github/gawashburn/knoll/badge.svg" alt="Coverage report" /></a>
 </p>
 
 A simple command-line tool for manipulating the configuration of macOS displays.
@@ -419,7 +420,6 @@ there is still room for additional improvements:
 * Support configuring the brightness, gamma function, etc. for a display.
 * Cannot easily write tests against logged output as `stderrlog` does not
   currently provide a way to control where it sends output.
-* Packaging the necessary frameworks for building with Nix.
 * It seems plausible that knoll could be extended to support Windows, XOrg,
   Wayland, etc. It is just a matter of finding the appropriate APIs and perhaps
   making some additional generalizations to the configuration data structures.
