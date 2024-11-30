@@ -300,7 +300,7 @@ fn argument_parse(args: &Vec<String>) -> ArgMatches {
         .value_parser(clap::builder::NonEmptyStringValueParser::new());
 
     let cmd = Command::new("knoll")
-        .version("0.1.0")
+        .version(clap::crate_version!())
         .about("Tool for configuring and arranging displays")
         .args(vec![quiet_arg, verbose_arg, format_arg])
         .args(&file_args)
