@@ -1,3 +1,4 @@
+#![feature(coverage_attribute)]
 ///! Expose the knoll modules as part of a library.  This is only really
 /// necessary so that they will be visible in the `test` directory.
 #[macro_use]
