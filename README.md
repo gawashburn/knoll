@@ -95,7 +95,7 @@ use the following `launchd` definition like:
                   frequency = 59;
                   color_depth = 8;
                   rotation = 0;
-                },
+                }
                 ...
               ]
             ]);
