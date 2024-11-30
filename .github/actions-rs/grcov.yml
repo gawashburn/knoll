@@ -1,6 +1,0 @@
-ignore-not-existing: true
-branch: false
-llvm: true
-output-type: lcov
-ignore:
-  - "/Users/*"
