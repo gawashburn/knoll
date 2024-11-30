@@ -17,17 +17,10 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v4
-
     - name: Select toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: nightly
-        override: true
+      uses: dtolnay/rust-toolchain@nightly
     - name: Test
-      uses: actions-rs/cargo@v1
-      with:
-        command: test
-        args: --all-features --no-fail-fast
+      run: cargo test --all-features --no-fail-fast
       env:
         CARGO_INCREMENTAL: '0'
         RUSTFLAGS: '-C instrument-coverage'
