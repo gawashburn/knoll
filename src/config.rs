@@ -10,7 +10,7 @@ use std::cmp::{Eq, PartialEq};
 
 /// Helper to serialize Option values as just the value itself.  It does not
 /// need to handle the case of None, as it is intended to be used with the
-/// seree option `skip_serializing_if = "Option::is_none"`.
+/// serde option `skip_serializing_if = "Option::is_none"`.
 fn serialize_opt<S, T>(opt: &Option<T>, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
