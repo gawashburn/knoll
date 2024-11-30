@@ -1,4 +1,4 @@
-name: Testing
+name: Tests
 
 on:
   push:
@@ -15,18 +15,18 @@ jobs:
     environment: Coverage
 
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-    - name: Select toolchain
-      uses: dtolnay/rust-toolchain@nightly
-    - name: Install cargo-llvm-cov
-      uses: taiki-e/install-action@cargo-llvm-cov
-    - name: Test with coverage
-      run: cargo llvm-cov --all-features --no-fail-fast  --lcov --output-path lcov.info
-      env:
-        CARGO_INCREMENTAL: '0'
-    - name: Coveralls upload
-      uses: coverallsapp/github-action@v2
-      with:
-        path-to-lcov: ${{ steps.coverage.outputs.report }}
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Select toolchain
+        uses: dtolnay/rust-toolchain@nightly
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Test with coverage
+        run: cargo llvm-cov --all-features --no-fail-fast  --lcov --output-path lcov.info
+        env:
+          CARGO_INCREMENTAL: '0'
+      - name: Coveralls upload
+        uses: coverallsapp/github-action@v2
+        with:
+          path-to-lcov: ${{ steps.coverage.outputs.report }}
     
