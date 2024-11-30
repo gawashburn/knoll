@@ -1,3 +1,4 @@
+#![feature(coverage_attribute)]
 extern crate knoll;
 
 use coverage_helper::test;
