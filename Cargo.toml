@@ -7,7 +7,7 @@ edition = "2021"
 license = "MIT"
 repository = "https://github.com/gawashburn/knoll"
 categories = ["command-line-utilities"]
-rust-version = "1.77"
+rust-version = "1.83.0"
 
 [dev-dependencies]
 coverage-helper = "0.2"

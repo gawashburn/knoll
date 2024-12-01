@@ -4,18 +4,32 @@
 <a href="https://crates.io/crates/knoll"><img src="https://img.shields.io/crates/v/knoll?style=flat-square" alt="Crates.io version" /></a>
 <img src="https://github.com/gawashburn/knoll/actions/workflows/tests.yml/badge.svg" alt="Testing action" />
 <a href="https://coveralls.io/github/gawashburn/knoll"><img src="https://coveralls.io/repos/github/gawashburn/knoll/badge.svg" alt="Coverage report" /></a>
-<img src=https://img.shields.io/github/license/gawashburn/knoll" alt="MIT License" />
+<img src="https://img.shields.io/github/license/gawashburn/knoll" alt="MIT License" />
 </p>
 
 A simple command-line tool for manipulating the configuration of macOS displays.
 
-<a id="installation">
-<h3>Installation</h3></a>
+## Table of contents
+
+- [Installation](#installation)
+    - [Cargo](#cargo)
+    - [launchd](#launchd)
+    - [Nix](#nix)
+- [Usage](#usage)
+    - [Pipeline mode](#pipeline_mode)
+    - [Listing mode](#listing_mode)
+    - [Daemon mode](#daemon_mode)
+- [Configuration reference](#configuration_reference)
+- [Future work](#future_work)
+- [Development](#development)
+- [What's in a name?](#whats_in_a_name)
+
+## Installation
 
 Until someone creates packages for knoll, probably the most common way to
 install it will be to use cargo or Nix.
 
-#### Cargo
+### Cargo
 
 If you already have a Rust environment set up, you can use the
 `cargo install` command:
@@ -24,7 +38,7 @@ If you already have a Rust environment set up, you can use the
 cargo install knoll
 ```
 
-#### launchd
+### launchd
 
 The recommended solution for running knoll as a daemon is to make use of
 [
@@ -72,7 +86,7 @@ launchctl enable gui/$(id -u)/my.service.knoll`
 launchctl start gui/$(id -u)/my.service.knoll`
 ````
 
-#### Nix
+### Nix
 
 The knoll repository contains a [Nix Flake](https://nixos.wiki/wiki/Flakes)
 that can be used to integrate knoll into your
@@ -116,13 +130,12 @@ use the following `launchd` definition like:
   };
 ```
 
-<a id="usage">
-<h3>Usage</h3></a>
+## Usage
 
 knoll has three primary usage modes: pipeline mode, listing mode, and
 daemon mode.
 
-#### Pipeline mode
+### Pipeline mode
 
 knoll's default mode supports reporting and updating the current display
 configuration. In the simplest case, you can just run it with no argument:
@@ -299,7 +312,7 @@ host$ echo $?
 1
 ```
 
-#### Listing mode
+### Listing mode
 
 knoll's second mode of operation allows inspecting the allowed display mode of
 attached displays:
@@ -337,7 +350,7 @@ host$ knoll list
 This is useful for determining which display configurations may successfully be
 used in an input to knoll.
 
-#### Daemon mode
+### Daemon mode
 
 Finally, knoll also supports a "daemon" mode.
 
@@ -369,8 +382,8 @@ level of responsiveness, it can be configured:
 host$ knoll daemon --wait=500ms --input=my_config.json
 ```
 
-<a id="config_reference">
-<h3>Configuration reference</h3></a>
+## Configuration reference
+
 A configuration may contain the following fields:
 
 * `uuid`  In JSON: `"uuid": "b00184f4c1ee4cdf8ccfea3fca2f93b2"`. In RON
@@ -401,8 +414,7 @@ A configuration may contain the following fields:
   specifies the current or requested rotation of the display in degrees. At
   present, only 0, 90, 180, and 270 degree rotations are supported.
 
-<a id="future_work">
-<h3>Future work</h3></a>
+## Future work
 
 So far knoll has been working successfully for my specific use cases. However,
 there is still room for additional improvements:
@@ -426,11 +438,10 @@ there is still room for additional improvements:
   Wayland, etc. It is just a matter of finding the appropriate APIs and perhaps
   making some additional generalizations to the configuration data structures.
 
-<a id="development">
-<h3>Development</h3>
+## Development
 
-<a href="https://blog.rust-lang.org/2023/01/10/Rust-1.71.0.html">
-    <img src="https://img.shields.io/badge/rustc-1.71.0+-lightgray.svg" alt="Rust 1.71.0+" />
+<a href="https://blog.rust-lang.org/2023/01/10/Rust-1.83.0.html">
+    <img src="https://img.shields.io/badge/rustc-1.83.0+-lightgray.svg" alt="Rust 1.83.0+" />
 </a>
 
 <a href="https://github.com/gawashburn/knoll/blob/master/LICENCE">
@@ -450,8 +461,7 @@ entirely possible there are better or more idiomatic ways to write some of
 this code. I have endeavoured to write knoll in a way that is conducive to
 unit testing. So please try to add appropriate tests for submitted changes.
 
-<a id="name">
-<h3>What's in a name?</h3></a>
+## What's in a name?
 
 knoll's name derives from the term
 [knolling](https://en.wikipedia.org/wiki/|knolling):
