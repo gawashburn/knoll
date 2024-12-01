@@ -78,7 +78,6 @@ fn run_knoll_fake(args: Vec<&str>, input: Option<String>) -> (Option<Error>, Str
 /// Test the knoll --help command
 fn test_help() {
     let (opt_err, _, _) = run_knoll_real(vec!["knoll", "--help"], None);
-    println!("opt_err: {:?}", opt_err);
     // Verify that a help error was produced.
     match opt_err {
         Some(Error::Argument(e)) => assert_eq!(e.kind(), clap::error::ErrorKind::DisplayHelp),
