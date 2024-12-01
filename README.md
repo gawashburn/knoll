@@ -440,13 +440,14 @@ there is still room for additional improvements:
 
 ## Development
 
+<p>
 <a href="https://blog.rust-lang.org/2023/01/10/Rust-1.83.0.html">
     <img src="https://img.shields.io/badge/rustc-1.83.0+-lightgray.svg" alt="Rust 1.83.0+" />
 </a>
-
 <a href="https://github.com/gawashburn/knoll/blob/master/LICENCE">
     <img src="https://img.shields.io/badge/licence-MIT-green" alt="MIT Licence" />
 </a>
+</p>
 
 knoll is written in [Rust](https://www.rust-lang.org/). I have not attempted
 cross-compilation, but at present it seems unlikely that knoll could be compiled
