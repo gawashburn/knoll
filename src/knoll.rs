@@ -2,18 +2,19 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use humantime;
 use log::*;
 use serde::Serialize;
-use simplelog::{TermLogger, WriteLogger};
+use simplelog::{SharedLogger, TermLogger, WriteLogger};
 use std::collections::HashMap;
 use std::fmt::Formatter;
 use std::io::IsTerminal;
 use std::io::{BufReader, Read, Write};
 use std::path::PathBuf;
-use std::sync::{Condvar, Mutex};
+use std::sync::{Condvar, LazyLock, Mutex, RwLock};
 
 use crate::config::*;
 use crate::core_graphics;
 use crate::displays;
 use crate::displays::*;
+use crate::indirect_logger::IndirectLogger;
 use crate::serde::serialize_to_string;
 use crate::valid_config;
 use crate::valid_config::*;
@@ -167,28 +168,41 @@ fn verbosity_to_filter(verbosity: usize) -> LevelFilter {
     }
 }
 
+/// A handle to the current global IndirectLogger.
+static GLOBAL_LOGGER: LazyLock<RwLock<Option<IndirectLogger>>> =
+    LazyLock::new(|| RwLock::new(None));
+
 /// Helper to configure the logger by verbosity and depending on whether it
 /// is writing to a terminal or not.
 fn configure_logger<ERR: Write + IsTerminal + Send + 'static>(
     verbosity: usize,
     stderr: ERR,
-) -> Result<(), Error> {
+) -> Result<(), SetLoggerError> {
     let mut config_builder = simplelog::ConfigBuilder::new();
     config_builder.set_time_format_rfc3339();
 
     let level_filter = verbosity_to_filter(verbosity);
-    if stderr.is_terminal() {
+    let session_logger: Box<dyn SharedLogger> = if stderr.is_terminal() {
         // If the destination is a terminal, use the `Termlogger`.
-        TermLogger::init(
+        TermLogger::new(
             level_filter,
             config_builder.build(),
             simplelog::TerminalMode::Stderr,
             simplelog::ColorChoice::Auto,
-        )?
+        )
     } else {
         // Otherwise just use a plain `WriteLogger`.
-        WriteLogger::init(level_filter, config_builder.build(), stderr)?
+        WriteLogger::new(level_filter, config_builder.build(), stderr)
     };
+
+    // Update or initialize the global logger.
+    let mut opt_logger = GLOBAL_LOGGER.write().unwrap();
+    match opt_logger.as_mut() {
+        Some(logger) => logger.update(session_logger),
+        None => {
+            *opt_logger = Some(IndirectLogger::init(session_logger)?);
+        }
+    }
 
     Ok(())
 }
@@ -571,7 +585,10 @@ fn configure_displays<DS: DisplayState>(
         }
     }
 
-    Ok(cfgtxn.commit()?)
+    cfgtxn.commit()?;
+    info!("Configuration complete.");
+
+    Ok(())
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -9,6 +9,7 @@ pub mod config;
 pub mod core_graphics;
 pub mod displays;
 pub mod fake_displays;
+pub mod indirect_logger;
 pub mod knoll;
 pub mod real_displays;
 mod serde;

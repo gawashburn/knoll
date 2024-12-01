@@ -10,6 +10,7 @@ mod config;
 mod core_graphics;
 mod displays;
 mod fake_displays;
+pub mod indirect_logger;
 mod knoll;
 mod real_displays;
 mod serde;
