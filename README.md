@@ -386,33 +386,59 @@ host$ knoll daemon --wait=500ms --input=my_config.json
 
 A configuration may contain the following fields:
 
-* `uuid`  In JSON: `"uuid": "b00184f4c1ee4cdf8ccfea3fca2f93b2"`. In RON
-  `uuid: "b00184f4c1ee4cdf8ccfea3fca2f93b2"`. This is used to uniquely identify
-  a given display. This is the only required field.
-* `enabled`  In JSON `"enabled": true`. In RON `enabled: true`. In knolls
-  output this indicates whether display is enabled, and in the input indicates
-  whether it should remain enabled. Due to limitations in the APIs knoll uses
-  at present, disabling a display will remove it from the computer's
-  configuration. So once disabled, it can only be re-enabled by unplugging
-  the display, restarting, etc.
-* `origin`  In JSON `"origin": [ 100, 100 ]`. In RON `origin: (100, 100)`. This
-  specifies the current or requested location of the display's upper left
-  corner.  
-  Displays may not overlap and all displays must touch.
-* `extents`  In JSON `"extents": [ 2560, 1440 ]`  In RON
-  `extends: (2560, 1440)`. This
-  specifies either the current or requested resolution of the display.
-* `scaled`  In JSON `"scaled": true`. In RON `scaled: true`. This specifies
-  whether
-  the current or requested display mode should use one-to-one pixels or a
-  "scaled" ("Retina") mode.
-* `frequency`  In JSON `"frequency": 60`. In RON `frequency: 60`. This
-  specifies the current or requested refresh frequency for the display in Hertz.
-* `color_depth`  In JSON `"color_depth": 8`. In RON `color_depth: 8`. This
-  specifies the current or requested color depth of the display.
-* `rotation`  In JSON `"rotation": 90`. In RON `rotation: 90`. This
-  specifies the current or requested rotation of the display in degrees. At
-  present, only 0, 90, 180, and 270 degree rotations are supported.
+* `uuid`
+    * This is used to uniquely identify a given display. This is the only
+      required field.
+        * JSON syntax: `"uuid": "b00184f4c1ee4cdf8ccfea3fca2f93b2"`.
+        * RON syntax `uuid: "b00184f4c1ee4cdf8ccfea3fca2f93b2"`.
+        * Nix syntax `uuid = "b00184f4c1ee4cdf8ccfea3fca2f93b2"`.
+* `enabled`
+    * In knolls output this indicates whether display is enabled, and in the
+      input
+      indicates whether it should remain enabled. Due to limitations in the APIs
+      knoll uses at present, disabling a display will remove it from the
+      computer's
+      configuration. So once disabled, it can only be re-enabled by unplugging
+      the display, restarting, etc.
+        * JSON syntax: `"enabled": true`.
+        * RON syntax: `enabled: true`.
+        * Nix syntax: `enabled = true`.
+* `origin`
+    * This specifies the current or requested location of the display's upper
+      left
+      corner. Displays may not overlap and all displays must touch.
+        * JSON syntax: `"origin": [ -100, 100 ]`.
+        * RON syntax: `origin: (-100, 100)`.
+        * Nix syntax: `origin = [ (-100) 100 ]`.
+* `extents`
+    * This specifies either the current or requested resolution of the display.
+        * JSON syntax: `"extents": [ 2560, 1440 ]`
+        * RON syntax: `extends: (2560, 1440)`.
+        * Nix syntax: `extents = [ 2560 1440 ]`.
+* `scaled`
+    * This specifies whether the current or requested display mode should use
+      one-to-one pixels or a "scaled" ("Retina") mode.
+        * JSON syntax: `"scaled": true`.
+        * RON syntax: `scaled: true`.
+        * Nix syntax: `scaled = true`.
+* `frequency`
+    * This specifies the current or requested refresh frequency for the display
+      in Hertz.
+        * JSON syntax: `"frequency": 60`.
+        * RON syntax: `frequency: 60`.
+        * Nix syntax: `frequency = 60`.
+* `color_depth`
+    * This specifies the current or requested color depth of the display.
+        * JSON syntax: `"color_depth": 8`.
+        * RON syntax: `color_depth: 8`.
+        * Ni syntax: `color_depth = 8`.
+* `rotation`
+    * This specifies the current or requested rotation of the display in
+      degrees.
+      At present, only 0, 90, 180, and 270 degree rotations are supported.
+        * JSON syntax: `"rotation": 90`.
+        * RON syntax: `rotation: 90`.
+        * Nix syntax: `rotation = 90`.
 
 ## Future work
 
@@ -422,18 +448,16 @@ there is still room for additional improvements:
 * Bug fixing. There remain many strange new displays to explore.
 * Writing more tests.
 * Support for display mirroring. I only ever mirror displays for presentations,
-  so I opted to punt on this for the first release. There is already some
+  so I opted to punt on this for the initial release. There is already some
   initial internals in place to support mirroring, but plumbing and testing is
   still needed.
 * Find a better API for enabling/disabling displays. Most users would expect
   this feature to put the display to sleep rather than detach it from the
   computer.
-* Detect display configurations with overlapping displays or gaps to at warn
+* Detect display configurations with overlapping displays or gaps to warn
   that the configuration is not stable.
 * Support UUID abbreviations similar to git hash abbreviations.
 * Support configuring the brightness, gamma function, etc. for a display.
-* Cannot easily write tests against logged output as `stderrlog` does not
-  currently provide a way to control where it sends output.
 * It seems plausible that knoll could be extended to support Windows, XOrg,
   Wayland, etc. It is just a matter of finding the appropriate APIs and perhaps
   making some additional generalizations to the configuration data structures.
@@ -441,12 +465,8 @@ there is still room for additional improvements:
 ## Development
 
 <p>
-<a href="https://blog.rust-lang.org/2023/01/10/Rust-1.83.0.html">
-    <img src="https://img.shields.io/badge/rustc-1.83.0+-lightgray.svg" alt="Rust 1.83.0+" />
-</a>
-<a href="https://github.com/gawashburn/knoll/blob/master/LICENCE">
-    <img src="https://img.shields.io/badge/licence-MIT-green" alt="MIT Licence" />
-</a>
+<a href="https://blog.rust-lang.org/2023/01/10/Rust-1.83.0.html"><img src="https://img.shields.io/badge/rustc-1.83.0+-lightgray.svg" alt="Rust 1.83.0+" /></a>
+<a href="https://github.com/gawashburn/knoll/blob/master/LICENCE"><img src="https://img.shields.io/badge/licence-MIT-green" alt="MIT Licence" /></a>
 </p>
 
 knoll is written in [Rust](https://www.rust-lang.org/). I have not attempted
@@ -456,8 +476,8 @@ does not actually depend on any macOS headers, etc. so it should be possible
 to compile it without installing
 [XCode](https://developer.apple.com/xcode/).
 
-Pull requests are definitely welcome. I am still a Rust novice, so it also
-entirely possible there are better or more idiomatic ways to write some of
+Pull requests are definitely welcome. I am still a relative Rust novice, so it
+also entirely possible there are better or more idiomatic ways to write some of
 this code. I have endeavoured to write knoll in a way that is conducive to
 unit testing. So please try to add appropriate tests for submitted changes.
 
