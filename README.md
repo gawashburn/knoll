@@ -447,7 +447,6 @@ there is still room for additional improvements:
 <a href="https://github.com/gawashburn/knoll/blob/master/LICENCE">
     <img src="https://img.shields.io/badge/licence-MIT-green" alt="MIT Licence" />
 </a>
-</a>
 
 knoll is written in [Rust](https://www.rust-lang.org/). I have not attempted
 cross-compilation, but at present it seems unlikely that knoll could be compiled
