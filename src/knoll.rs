@@ -25,6 +25,7 @@ use crate::valid_config::*;
 #[derive(Debug)]
 pub enum Error {
     // Wrapper errors.
+    Argument(clap::Error),
     Config(valid_config::Error),
     Displays(displays::Error),
     Io(std::io::Error),
@@ -48,6 +49,7 @@ impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         use crate::knoll::Error::*;
         match self {
+            Argument(e) => Some(e),
             Config(e) => Some(e),
             Displays(e) => Some(e),
             Io(e) => Some(e),
@@ -57,6 +59,12 @@ impl std::error::Error for Error {
             LogInit(e) => Some(e),
             _ => None,
         }
+    }
+}
+
+impl From<clap::Error> for Error {
+    fn from(e: clap::Error) -> Self {
+        Error::Argument(e)
     }
 }
 
@@ -107,6 +115,9 @@ impl std::fmt::Display for Error {
         use crate::knoll::Error::*;
 
         match self {
+            // TODO Detect if the output is a terminal to determine when
+            //  to use ANSI escape codes.
+            Argument(ce) => write!(f, "{}", ce.render().ansi()),
             NoConfigGroups => write!(
                 f,
                 "The parsed input contains no configuration groups.  \
@@ -225,7 +236,7 @@ pub fn run<
     stderr: ERR,
 ) -> Result<(), Error> {
     // Handle parsing the command-line arguments.
-    let matches = argument_parse(args);
+    let matches = argument_parse(args)?;
 
     // Examine the serialization format option.
     let format_opt: Option<&str> = matches.get_one::<String>("FORMAT").map(|s| s.as_str());
@@ -272,7 +283,7 @@ pub fn run<
 }
 
 /// Helper for parsing the command-line arguments.
-fn argument_parse(args: &Vec<String>) -> ArgMatches {
+fn argument_parse(args: &Vec<String>) -> Result<ArgMatches, clap::Error> {
     // Clap argument parsing setup.
 
     let in_arg = Arg::new("IN")
@@ -313,7 +324,7 @@ fn argument_parse(args: &Vec<String>) -> ArgMatches {
         .default_value("2s")
         .value_parser(clap::builder::NonEmptyStringValueParser::new());
 
-    let cmd = Command::new("knoll")
+    let mut cmd = Command::new("knoll")
         .version(clap::crate_version!())
         .about("Tool for configuring and arranging displays")
         .args(vec![quiet_arg, verbose_arg, format_arg])
@@ -328,7 +339,7 @@ fn argument_parse(args: &Vec<String>) -> ArgMatches {
                 .arg(out_arg),
         ]);
 
-    cmd.get_matches_from(args)
+    cmd.try_get_matches_from(args)
 }
 
 ////////////////////////////////////////////////////////////////////////////////

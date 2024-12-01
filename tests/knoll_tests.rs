@@ -13,11 +13,6 @@ use tempfile::tempdir;
 /// Run the knoll command with the given arguments an optional input and
 /// returns whether the invoked resulted in an error and the text output
 /// to stdout and stderr.
-///
-/// The only caveat is that it is currently not possible to override output
-/// destinations for the clap argument parser when using `--help` or
-/// `--version`.  So at present we cannot capture the output of these
-/// options.
 fn run_knoll<DS: DisplayState>(
     args: Vec<&str>,
     input: Option<String>,
@@ -82,13 +77,24 @@ fn run_knoll_fake(args: Vec<&str>, input: Option<String>) -> (Option<Error>, Str
 #[test]
 /// Test the knoll --help command
 fn test_help() {
-    run_knoll_real(vec!["knoll", "--help"], None);
+    let (opt_err, _, _) = run_knoll_real(vec!["knoll", "--help"], None);
+    println!("opt_err: {:?}", opt_err);
+    // Verify that a help error was produced.
+    match opt_err {
+        Some(Error::Argument(e)) => assert_eq!(e.kind(), clap::error::ErrorKind::DisplayHelp),
+        _ => panic!("Unexpected error: {:?}", opt_err),
+    }
 }
 
 #[test]
 /// Test the knoll --version command
 fn test_version() {
-    run_knoll_real(vec!["knoll", "--version"], None);
+    let (opt_err, _, _) = run_knoll_real(vec!["knoll", "--version"], None);
+    // Verify that a version error was produced.
+    match opt_err {
+        Some(Error::Argument(e)) => assert_eq!(e.kind(), clap::error::ErrorKind::DisplayVersion),
+        _ => panic!("Unexpected error: {:?}", opt_err),
+    }
 }
 
 #[test]
