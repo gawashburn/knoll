@@ -2,7 +2,7 @@
 name = "knoll"
 description = "A command-line tool for configuring macOS displays"
 authors = ["Geoffrey Washburn <geoff@washburght.org>"]
-version = "0.2.6"
+version = "0.3.0"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/gawashburn/knoll"
