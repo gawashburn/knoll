@@ -16,13 +16,13 @@ A simple command-line tool for manipulating the configuration of macOS displays.
     - [launchd](#launchd)
     - [Nix](#nix)
 - [Usage](#usage)
-    - [Pipeline mode](#pipeline_mode)
-    - [Listing mode](#listing_mode)
-    - [Daemon mode](#daemon_mode)
-- [Configuration reference](#configuration_reference)
-- [Future work](#future_work)
+    - [Pipeline mode](#pipeline-mode)
+    - [Listing mode](#listing-mode)
+    - [Daemon mode](#daemon-mode)
+- [Configuration reference](#configuration-reference)
+- [Future work](#future-work)
 - [Development](#development)
-- [What's in a name?](#whats_in_a_name)
+- [What's in a name?](#whats-in-a-name)
 
 ## Installation
 
