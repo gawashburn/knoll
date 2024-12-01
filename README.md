@@ -3,7 +3,7 @@
 <p>
 <a href="https://crates.io/crates/knoll"><img src="https://img.shields.io/crates/v/knoll?style=flat-square" alt="Crates.io version" /></a>
 <img src="https://github.com/gawashburn/knoll/actions/workflows/tests.yml/badge.svg" alt="Testing action" />
-<a href="https://coveralls.io/github/gawashburn/knoll"><img src="https://coveralls.io/repos/github/gawashburn/knoll/badge.svg" alt="Coverage report" /></a>
+<a href='https://coveralls.io/github/gawashburn/knoll?branch=main'><img src='https://coveralls.io/repos/github/gawashburn/knoll/badge.svg?branch=main' alt='Coverage Status' /></a>
 <img src="https://img.shields.io/github/license/gawashburn/knoll" alt="MIT License" />
 </p>
 
