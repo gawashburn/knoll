@@ -324,7 +324,7 @@ fn argument_parse(args: &Vec<String>) -> Result<ArgMatches, clap::Error> {
         .default_value("2s")
         .value_parser(clap::builder::NonEmptyStringValueParser::new());
 
-    let mut cmd = Command::new("knoll")
+    let cmd = Command::new("knoll")
         .version(clap::crate_version!())
         .about("Tool for configuring and arranging displays")
         .args(vec![quiet_arg, verbose_arg, format_arg])

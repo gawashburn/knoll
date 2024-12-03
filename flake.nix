@@ -22,13 +22,15 @@
         };
 
         toolchain = (pkgs.rustChannelOf {
-          rustToolchain = ./rust-toolchain.toml;
-          sha256 = "sha256-uL/dGMuHqfMt6uGCLmLpsQklcizBQoGivgQq7tBREXE=";
+          # NOTE: Uncomment to change the Rust toolchain used to build
+          # the project.  Also uncomment below.
+          # rustToolchain = ./rust-toolchain.toml;
+          # sha256 = "";
         }).rust;
 
         naersk' = pkgs.callPackage naersk {
-          cargo = toolchain;
-          rustc = toolchain;
+          #cargo = toolchain;
+          #rustc = toolchain;
         };
 
       in rec {
