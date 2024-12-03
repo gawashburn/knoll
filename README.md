@@ -26,8 +26,18 @@ A simple command-line tool for manipulating the configuration of macOS displays.
 
 ## Installation
 
-Until someone creates packages for knoll, probably the most common way to
-install it will be to use cargo or Nix.
+### Pre-built binaries
+
+Pre-built Intel and Apple Silicon binaries are available from the GitHub
+repository [releases](https://github.com/gawashburn/knoll/releases/) page.
+
+Note that after downloading and unpacking, as these binaries are not signed
+you may need to run the following command so that macOS will allow them to
+be run:
+
+```bash
+xattr -d com.apple.quarantine /path/to/knoll
+```
 
 ### Cargo
 
@@ -37,54 +47,6 @@ If you already have a Rust environment set up, you can use the
 ```bash
 cargo install knoll
 ```
-
-### launchd
-
-The recommended solution for running knoll as a daemon is to make use of
-[
-`launchd`](https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPSystemStartup/Chapters/CreatingLaunchdJobs.html).
-Choose a service name unique to your host using
-the [reverse domain name](https://en.wikipedia.org/wiki/Reverse_domain_name_notation)
-convention and create a `.plist` file in `~/Library/LaunchAgents`:
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN"
-        "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-    <dict>
-        <key>EnvironmentVariables</key>
-        <dict>
-            <key>PATH</key>
-            <string>...</string>
-        </dict>
-        <key>KeepAlive</key>
-        <true/>
-        <key>Label</key>
-        <string>my.service.knoll</string>
-        <key>ProgramArguments</key>
-        <array>
-            <string>/path/to/knoll</string>
-            <string>daemon</string>
-            <string>-vvv</string>
-            <string>--input=/path/to/config-file</string>
-        </array>
-        <key>RunAtLoad</key>
-        <true/>
-        <key>StandardErrorPath</key>
-        <string>/tmp/knoll.err</string>
-        <key>StandardOutPath</key>
-        <string>/tmp/knoll.out</string>
-    </dict>
-</plist>
-```
-
-You can then enable and start service using
-
-```bash
-launchctl enable gui/$(id -u)/my.service.knoll`
-launchctl start gui/$(id -u)/my.service.knoll`
-````
 
 ### Nix
 
@@ -129,6 +91,9 @@ use the following `launchd` definition like:
     };
   };
 ```
+
+The particulars of the configuration file you craft in your Nix definition will
+be explained in the subsequent sections.
 
 ## Usage
 
@@ -381,6 +346,57 @@ level of responsiveness, it can be configured:
 ```bash
 host$ knoll daemon --wait=500ms --input=my_config.json
 ```
+
+### launchd
+
+The recommended solution for running knoll as a daemon is to make use of
+[
+`launchd`](https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPSystemStartup/Chapters/CreatingLaunchdJobs.html).
+If you are not using nix-darwin as described in
+the [Installation](#installation)
+section, you can still configure `launchd` manually.
+Choose a service name unique to your host using
+the [reverse domain name](https://en.wikipedia.org/wiki/Reverse_domain_name_notation)
+convention and create a `.plist` file in `~/Library/LaunchAgents`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN"
+        "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+    <dict>
+        <key>EnvironmentVariables</key>
+        <dict>
+            <key>PATH</key>
+            <string>...</string>
+        </dict>
+        <key>KeepAlive</key>
+        <true/>
+        <key>Label</key>
+        <string>my.service.knoll</string>
+        <key>ProgramArguments</key>
+        <array>
+            <string>/path/to/knoll</string>
+            <string>daemon</string>
+            <string>-vvv</string>
+            <string>--input=/path/to/config-file</string>
+        </array>
+        <key>RunAtLoad</key>
+        <true/>
+        <key>StandardErrorPath</key>
+        <string>/tmp/knoll.err</string>
+        <key>StandardOutPath</key>
+        <string>/tmp/knoll.out</string>
+    </dict>
+</plist>
+```
+
+You can then enable and start service using
+
+```bash
+launchctl enable gui/$(id -u)/my.service.knoll`
+launchctl start gui/$(id -u)/my.service.knoll`
+````
 
 ## Configuration reference
 
