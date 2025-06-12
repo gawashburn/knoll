@@ -139,7 +139,6 @@ impl From<CFStringBuiltInEncodings> for CFStringEncoding {
 }
 
 // TODO Add values or remove these constants ?
-// kCGNullDirectDisplay
 // kDisplayProductIDGeneric
 // kDisplayVendorIDUnknown
 
@@ -312,8 +311,8 @@ extern "C" {
     //   to clean up?  Need to determine appropriate location to call.
     // CGDisplayRemoveReconfigurationCallback
 
-    // TODO Finish adding support for configuring display mirrors.
-    // fn CGDisplayMirrorsDisplay
+    /// https://developer.apple.com/documentation/coregraphics/cgdisplaymirrorsdisplay(_:)
+    fn CGDisplayMirrorsDisplay(display_id: CGDirectDisplayID) -> CGDirectDisplayID;
 
     /// https://developer.apple.com/documentation/appkit/1428475-nsapplicationload
     pub fn NSApplicationLoad() -> bool;
@@ -548,9 +547,14 @@ pub fn cg_configure_display_fade_effect(
 pub fn cg_configure_display_mirror_of_display(
     config_ref: &CGDisplayConfigRef,
     display_id: DisplayID,
-    master_id: DisplayID,
+    master_id: Option<DisplayID>,
 ) -> CGError {
-    unsafe { CGConfigureDisplayMirrorOfDisplay(*config_ref, display_id.id, master_id.id) }
+    // In CGDirectDisplay.h kCGNullDirectDisplay is a defined as a
+    // preprocess macro to be 0, as such there is no symbol we can
+    // link to obtain the value.
+    let target_id = master_id.map(|d| d.id).unwrap_or(0);
+
+    unsafe { CGConfigureDisplayMirrorOfDisplay(*config_ref, display_id.id, target_id) }
 }
 
 pub fn cg_display_register_reconfiguration_callback(cb: extern "C" fn()) -> CGError {
@@ -602,6 +606,15 @@ pub fn cgs_configure_display_enabled(
     enabled: bool,
 ) -> CGError {
     unsafe { CGSConfigureDisplayEnabled(*config_ref, display_id.id, enabled) }
+}
+
+pub fn cg_display_mirrors_display(display_id: DisplayID) -> Option<DisplayID> {
+    let mirrored_id = unsafe { CGDisplayMirrorsDisplay(display_id.id) };
+    if mirrored_id == 0 {
+        None
+    } else {
+        Some(DisplayID { id: mirrored_id })
+    }
 }
 
 /// Helper to set the rotation of a display via the MPDisplay Objective-C class.

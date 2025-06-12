@@ -77,7 +77,7 @@ impl From<std::string::FromUtf8Error> for Error {
 ////////////////////////////////////////////////////////////////////////////////
 
 /// Tag class to specify the kind of (de)serialization to be used.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Format {
     Ron,
     Json,
@@ -91,6 +91,30 @@ impl Format {
             "json" => Ok(Format::Json),
             fs => Err(Error::UnsupportedFormat(fs.to_owned())),
         }
+    }
+}
+
+#[cfg(test)]
+mod format_tests {
+    use super::*;
+    use coverage_helper::test;
+    use std::error::Error as StdError;
+
+    #[test]
+    fn test_format_from() {
+        assert_eq!(Format::from("ron").unwrap(), Format::Ron);
+        assert_eq!(Format::from("json").unwrap(), Format::Json);
+    }
+
+    #[test]
+    fn test_format_from_unsupported() {
+        let err = Format::from("xml").unwrap_err();
+        match &err {
+            Error::UnsupportedFormat(fs) => assert_eq!(fs, "xml"),
+            _ => panic!("Expected UnsupportedFormat"),
+        }
+        assert_eq!(format!("{}", err), "Unsupported format: xml");
+        assert!(err.source().is_none());
     }
 }
 
@@ -125,4 +149,78 @@ pub fn deserialize<'a, D: Deserialize<'a>>(format: Format, str: &'a str) -> Resu
         Format::Ron => ron::de::from_str(str)?,
         Format::Json => serde_json::from_str(str).map_err(Error::DeJson)?,
     })
+}
+
+#[cfg(test)]
+mod serialization_tests {
+    use super::*;
+    use coverage_helper::test;
+    use serde::{Deserialize, Serialize};
+    use std::error::Error as StdError;
+
+    // Simple struct for testing purposes.
+    #[derive(Serialize, Deserialize, Debug, PartialEq)]
+    struct TestStruct {
+        a: i32,
+        b: String,
+    }
+
+    #[test]
+    fn test_serialize_to_string_and_deserialize_ron() {
+        let value = TestStruct {
+            a: 1,
+            b: "hello".into(),
+        };
+        let s = serialize_to_string(Format::Ron, &value).unwrap();
+        let back: TestStruct = deserialize(Format::Ron, &s).unwrap();
+        assert_eq!(value, back);
+    }
+
+    #[test]
+    fn test_serialize_to_string_and_deserialize_json() {
+        let value = TestStruct {
+            a: 42,
+            b: "world".into(),
+        };
+        let s = serialize_to_string(Format::Json, &value).unwrap();
+        let back: TestStruct = deserialize(Format::Json, &s).unwrap();
+        assert_eq!(value, back);
+    }
+
+    #[test]
+    fn test_deserialize_invalid_ron() {
+        let invalid = "(a: )";
+        let err = deserialize::<TestStruct>(Format::Ron, invalid).unwrap_err();
+        match err {
+            Error::DeRon(_) => {}
+            _ => panic!("Expected DeRon error"),
+        }
+        assert!(err.source().is_some());
+        assert!(format!("{}", err).starts_with("RON deserialization error:"));
+    }
+
+    #[test]
+    fn test_deserialize_invalid_json() {
+        let invalid = "{a:}";
+        let err = deserialize::<TestStruct>(Format::Json, invalid).unwrap_err();
+        match err {
+            Error::DeJson(_) => {}
+            _ => panic!("Expected DeJson error"),
+        }
+        assert!(err.source().is_some());
+        assert!(format!("{}", err).starts_with("JSON deserialization error:"));
+    }
+
+    #[test]
+    fn test_utf8_conversion_error() {
+        let invalid = vec![0xff, 0xfe, 0xfd];
+        let e = String::from_utf8(invalid).unwrap_err();
+        let err: Error = e.into();
+        match &err {
+            Error::Utf8Conversion(_) => {}
+            _ => panic!("Expected Utf8Conversion error"),
+        }
+        assert!(err.source().is_some());
+        assert!(format!("{}", err).starts_with("Error converting from UTF-8 to string format:"));
+    }
 }

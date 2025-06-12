@@ -43,6 +43,7 @@ enum FakeDisplayEdit {
     SetRotation(Rotation),
     SetOrigin(Point),
     SetEnabled(bool),
+    SetMirroredDisplay(Option<String>),
 }
 
 pub struct FakeDisplayConfigTransaction {
@@ -80,6 +81,13 @@ impl FakeDisplayConfigTransaction {
 
 impl DisplayConfigTransaction for FakeDisplayConfigTransaction {
     type DisplayModeType = FakeDisplayMode;
+
+    fn set_mirroring(&mut self, uuid: &str, mirror_uuid: Option<&str>) -> Result<(), Error> {
+        self.record_edit(
+            uuid,
+            FakeDisplayEdit::SetMirroredDisplay(mirror_uuid.map(|s| s.to_owned())),
+        )
+    }
 
     fn set_mode(&mut self, uuid: &str, mode: &Self::DisplayModeType) -> Result<(), Error> {
         if mode.uuid != uuid {
@@ -146,6 +154,7 @@ impl Drop for FakeDisplayConfigTransaction {
 #[derive(Debug, Clone)]
 pub struct FakeDisplay {
     uuid: String,
+    mirrored_display: Option<String>,
     enabled: bool,
     origin: Point,
     rotation: Rotation,
@@ -173,6 +182,9 @@ impl FakeDisplay {
             FakeDisplayEdit::SetEnabled(enabled) => {
                 self.enabled = enabled;
             }
+            FakeDisplayEdit::SetMirroredDisplay(mirror_uuid) => {
+                self.mirrored_display = mirror_uuid;
+            }
         }
     }
 }
@@ -180,6 +192,10 @@ impl FakeDisplay {
 impl Display for FakeDisplay {
     fn uuid(&self) -> &str {
         self.uuid.as_str()
+    }
+
+    fn mirror_of(&self) -> Option<&str> {
+        self.mirrored_display.as_deref()
     }
 
     fn enabled(&self) -> bool {

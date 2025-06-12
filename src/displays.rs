@@ -202,6 +202,10 @@ pub trait Display: std::fmt::Debug {
     /// Obtain the UUID of this display.
     fn uuid(&self) -> &str;
 
+    /// If this Display is mirroring another, returns Some of that Display's
+    /// UUID.  Otherwise, returns None.
+    fn mirror_of(&self) -> Option<&str>;
+
     /// Is this display enabled?  Currently, due to limitations of the APIs
     /// currently used, this will always be true as disabled displays will
     /// not be reported as being attached.
@@ -256,6 +260,12 @@ pub trait Display: std::fmt::Debug {
 pub trait DisplayConfigTransaction {
     /// The type of display modes that this transaction will accept.
     type DisplayModeType: DisplayMode;
+
+    /// Set the display to mirror the contents of another display if passed
+    /// Some of that display's UUID.  If passed None disables mirroring.
+    /// Will return an error if either display UUID is not found.
+    /// TODO Make this an error to use with other operations?
+    fn set_mirroring(&mut self, uuid: &str, mirror_of_uuid: Option<&str>) -> Result<(), Error>;
 
     /// Set the display mode the given display.
     /// Will return an error if there is no display with the given UUID.

@@ -192,7 +192,7 @@ impl DisplayConfigTransaction for RealDisplayConfigTransaction {
 
         let display_id = self.display_id(uuid)?;
         // Check that we were not passed a mode for a different display.
-        // Panic here as this is programming error.
+        // Panic here as this is a programming error.
         if mode.display_id != display_id {
             panic!(
                 "Tried using a display mode for display {:?} with display {:?}",
@@ -257,6 +257,30 @@ impl DisplayConfigTransaction for RealDisplayConfigTransaction {
         }
     }
 
+    fn set_mirroring(&mut self, uuid: &str, mirror_of_uuid: Option<&str>) -> Result<(), Error> {
+        if self.dropped {
+            return Err(Error::InvalidTransactionState);
+        }
+
+        let display_id = self.display_id(uuid)?;
+        // Determine master DisplayID (None disables mirroring)
+        let master_id = mirror_of_uuid
+            .map(|uuid| self.display_id(uuid))
+            .transpose()?;
+
+        cg_error_to_result(
+            cg_configure_display_mirror_of_display(&self.config_ref, display_id, master_id),
+            match mirror_of_uuid {
+                Some(mirror_uuid) => format!(
+                    "While attempting to set display {} mirroring to {}",
+                    uuid, mirror_uuid
+                ),
+                None => format!("While attempting to disable mirroring for display {}", uuid),
+            }
+            .as_str(),
+        )
+    }
+
     fn commit(mut self) -> Result<(), Error> {
         if self.dropped {
             return Err(Error::InvalidTransactionState);
@@ -299,6 +323,7 @@ pub struct RealDisplay {
     /// DisplayID used to associate this RealDisplay with an attached display.
     display_id: DisplayID,
     uuid: String,
+    mirror_of: Option<String>,
     enabled: bool,
     origin: Point,
     rotation: Rotation,
@@ -355,6 +380,9 @@ impl RealDisplay {
     /// Create a `RealDisplay` given a `DisplayID`.
     fn new(display_id: DisplayID) -> Result<Self, Error> {
         let uuid = RealDisplay::compute_uuid(display_id);
+        // Determine if this display is mirroring another and record master UUID
+        let mirror_of =
+            cg_display_mirrors_display(display_id).map(|did| RealDisplay::compute_uuid(did));
 
         let mut num_modes = 0;
         cg_error_to_result(
@@ -436,6 +464,7 @@ impl RealDisplay {
         Ok(RealDisplay {
             display_id,
             uuid,
+            mirror_of,
             enabled,
             origin: Point {
                 // TODO Could not find a safer more idiomatic way of converting?
@@ -474,6 +503,10 @@ impl Display for RealDisplay {
 
     fn possible_modes(&self) -> &[Self::DisplayModeType] {
         self.modes.as_slice()
+    }
+
+    fn mirror_of(&self) -> Option<&str> {
+        self.mirror_of.as_deref()
     }
 }
 

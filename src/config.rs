@@ -80,12 +80,16 @@ fn test_deserialize_opt() {
 #[derive(Debug, PartialEq, Eq, Clone, Default, Serialize, Deserialize)]
 pub struct Config {
     pub uuid: String,
-    // TODO Add support for mirroring.
-    //#[serde(skip_serializing_if = "HashSet::is_empty", default)]
-    //pub mirrors: HashSet<String>,
     // TODO Is there a way to avoid repeating the same attributes?
     // It might be possible with macros, but so far I have not found
     // any notion of an defining an attribute alias.
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "serialize_opt",
+        deserialize_with = "deserialize_opt",
+        default
+    )]
+    pub mirror_of: Option<String>,
     #[serde(
         skip_serializing_if = "Option::is_none",
         serialize_with = "serialize_opt",
@@ -164,6 +168,7 @@ fn test_serialization() {
     let c1 = Config::default();
     let c2 = Config {
         uuid: "ab3456def".to_owned(),
+        mirror_of: None,
         enabled: Some(true),
         origin: Some(Point { x: 1, y: 2 }),
         extents: Some(Point { x: 3, y: 6 }),
@@ -417,6 +422,7 @@ fn test_deserialization() {
         c,
         Config {
             uuid: "abcdef1234".to_owned(),
+            mirror_of: None,
             enabled: None,
             origin: None,
             extents: None,
@@ -434,6 +440,7 @@ fn test_deserialization() {
         c,
         Config {
             uuid: "abcdef1234".to_owned(),
+            mirror_of: None,
             enabled: Some(false),
             origin: Some(Point { x: 1, y: 2 }),
             extents: None,
@@ -444,12 +451,13 @@ fn test_deserialization() {
         }
     );
 
-    let c: Config =
-        serde_json::de::from_str("[\"abcdef123\", true]").expect("Deserialization should not fail");
+    let c: Config = serde_json::de::from_str("[\"abcdef123\", \"fedcba456\", true]")
+        .expect("Deserialization should not fail");
     assert_eq!(
         c,
         Config {
             uuid: "abcdef123".to_owned(),
+            mirror_of: Some("fedcba456".to_owned()),
             enabled: Some(true),
             origin: None,
             extents: None,
@@ -466,6 +474,7 @@ fn test_deserialization() {
         c,
         Config {
             uuid: "abcdef1234".to_owned(),
+            mirror_of: None,
             enabled: None,
             origin: None,
             extents: None,
@@ -482,6 +491,7 @@ fn test_deserialization() {
         c,
         Config {
             uuid: "abcdef1234".to_owned(),
+            mirror_of: None,
             enabled: Some(false),
             origin: None,
             extents: None,
@@ -498,6 +508,7 @@ fn test_deserialization() {
         c,
         Config {
             uuid: "abcdef1234".to_owned(),
+            mirror_of: None,
             enabled: None,
             origin: Some(Point { x: 1, y: 2 }),
             extents: None,
@@ -515,6 +526,7 @@ fn test_deserialization() {
         c,
         Config {
             uuid: "abcdef1234".to_owned(),
+            mirror_of: None,
             enabled: Some(false),
             origin: Some(Point { x: 0, y: 1 }),
             extents: None,
@@ -535,6 +547,42 @@ fn test_deserialization() {
         Ok(_) => panic!("Deserialization should have failed."),
     }
 
+    let c: Config =
+        ron::de::from_str("(uuid: \"abcdef1234\", mirror_of: \"5678fedcba\", enabled: true)")
+            .expect("Deserialization should not fail");
+    assert_eq!(
+        c,
+        Config {
+            uuid: "abcdef1234".to_owned(),
+            mirror_of: Some("5678fedcba".to_owned()),
+            enabled: Some(true),
+            origin: None,
+            extents: None,
+            scaled: None,
+            frequency: None,
+            color_depth: None,
+            rotation: None,
+        }
+    );
+
+    let c: Config =
+        serde_json::de::from_str("{\"uuid\":\"abcdef1234\",\"mirror_of\":\"5678fedcba\"}")
+            .expect("Deserialization should not fail");
+    assert_eq!(
+        c,
+        Config {
+            uuid: "abcdef1234".to_owned(),
+            mirror_of: Some("5678fedcba".to_owned()),
+            enabled: None,
+            origin: None,
+            extents: None,
+            scaled: None,
+            frequency: None,
+            color_depth: None,
+            rotation: None,
+        }
+    );
+
     let cg: ConfigGroup = serde_json::de::from_str("[{\"uuid\":\"abcdef1234\"}]")
         .expect("Deserialization should not fail");
     assert_eq!(
@@ -542,6 +590,7 @@ fn test_deserialization() {
         ConfigGroup {
             configs: vec![Config {
                 uuid: "abcdef1234".to_owned(),
+                mirror_of: None,
                 enabled: None,
                 origin: None,
                 extents: None,
@@ -560,6 +609,7 @@ fn test_deserialization() {
         ConfigGroup {
             configs: vec![Config {
                 uuid: "abcdef1234".to_owned(),
+                mirror_of: None,
                 enabled: None,
                 origin: Some(Point { x: 1, y: 2 }),
                 extents: None,
@@ -579,6 +629,7 @@ fn test_deserialization() {
             groups: vec![ConfigGroup {
                 configs: vec![Config {
                     uuid: "abcdef1234".to_owned(),
+                    mirror_of: None,
                     enabled: None,
                     origin: Some(Point { x: 1, y: 2 }),
                     extents: None,

@@ -455,6 +455,14 @@ A configuration may contain the following fields:
         * JSON syntax: `"rotation": 90`.
         * RON syntax: `rotation: 90`.
         * Nix syntax: `rotation = 90`.
+* `mirror_of`
+    * This specifies the UUID of another display that this display should
+      mirror. When this option is set, other display settings are ignored except
+      for `uuid`. The mirrored display will show the same content as
+      the source display.
+        * JSON syntax: `"mirror_of": "b00184f4c1ee4cdf8ccfea3fca2f93b2"`.
+        * RON syntax: `mirror_of: "b00184f4c1ee4cdf8ccfea3fca2f93b2"`.
+        * Nix syntax: `mirror_of = "b00184f4c1ee4cdf8ccfea3fca2f93b2"`.
 
 ## Future work
 
@@ -463,10 +471,6 @@ there is still room for additional improvements:
 
 * Bug fixing. There remain many strange new displays to explore.
 * Writing more tests.
-* Support for display mirroring. I only ever mirror displays for presentations,
-  so I opted to punt on this for the initial release. There is already some
-  initial internals in place to support mirroring, but plumbing and testing is
-  still needed.
 * Find a better API for enabling/disabling displays. Most users would expect
   this feature to put the display to sleep rather than detach it from the
   computer.

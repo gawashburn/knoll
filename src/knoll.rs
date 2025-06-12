@@ -40,8 +40,8 @@ pub enum Error {
     //   string because we cannot thread the configured serialization
     //   format through `std::fmt::Display`.
     NoMatchingConfigGroup(Vec<String>),
-    NoMatchingDisplayMode(String),
-    AmbiguousDisplayMode(Vec<String>),
+    NoMatchingDisplayMode(String, String),
+    AmbiguousDisplayMode(String, Vec<String>),
     AmbiguousConfigGroup(Vec<String>),
 }
 
@@ -137,15 +137,20 @@ impl std::fmt::Display for Error {
                     str.join(" ")
                 )
             }
-            NoMatchingDisplayMode(str) => {
+            NoMatchingDisplayMode(uuid, str) => {
                 write!(
                     f,
-                    "No display mode matches the given configuration: {}",
-                    str
+                    "No display mode matches the given configuration for {}: {}",
+                    uuid, str
                 )
             }
-            AmbiguousDisplayMode(str) => {
-                write!(f, "Ambiguous choice of display mode: {}", str.join(" "))
+            AmbiguousDisplayMode(uuid, str) => {
+                write!(
+                    f,
+                    "Ambiguous choice of display mode for {}: {}",
+                    uuid,
+                    str.join(" ")
+                )
             }
             Config(ce) => {
                 write!(f, "{}", ce)
@@ -218,6 +223,14 @@ fn configure_logger<ERR: Write + IsTerminal + Send + 'static>(
     Ok(())
 }
 
+/// Helper to flush the current logger, if it exists.
+fn flush_logger() {
+    // Flush the current logger, if it exists.
+    if let Some(logger) = GLOBAL_LOGGER.read().unwrap().as_ref() {
+        logger.flush();
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 /// Generic entry point to the knoll command-line tool.  
@@ -252,7 +265,7 @@ pub fn run<
     configure_logger(verbosity, stderr)?;
 
     // Check to see which program mode should be used.
-    match matches.subcommand() {
+    let result = match matches.subcommand() {
         Some(("daemon", sub_matches)) => {
             info!("Daemon mode selected.");
 
@@ -279,7 +292,12 @@ pub fn run<
 
             pipeline_command::<DS>(quiet, config_reader, output.as_mut(), format)
         }
-    }
+    };
+
+    // Ensure that all logging is flushed before exiting.
+    flush_logger();
+
+    result
 }
 
 /// Helper for parsing the command-line arguments.
@@ -522,22 +540,28 @@ fn select_mode<D: Display>(
 ) -> Result<D::DisplayModeType, Error> {
     let pattern = mode_pattern_from_config(config);
     let mut modes = display.matching_modes(&pattern);
-    if modes.is_empty() {
-        Err(Error::NoMatchingDisplayMode(serialize_to_string(
-            format, &config,
-        )?))
-    } else if modes.len() > 1 {
+    if modes.len() > 1 {
+        // If there is more than one matching mode, the configuration is ambiguous.
+
+        let mut mode_strs = Vec::new();
         // TODO A little annoying that it is necessary to use a loop rather
         // than mapping so that ? can be used.
-        let mut mode_strs = Vec::new();
         for m in modes {
             mode_strs.push(serialize_to_string(format, &m)?)
         }
-        Err(Error::AmbiguousDisplayMode(mode_strs))
+        Err(Error::AmbiguousDisplayMode(
+            display.uuid().to_string(),
+            mode_strs,
+        ))
+    } else if let Some(mode) = modes.pop() {
+        // If we can pop a mode, then there is exactly one match, and we can use it.
+        Ok(mode)
     } else {
-        // The unwrap here is safe we as we've established that set of matching
-        // modes is non-empty.
-        Ok(modes.pop().unwrap())
+        // Otherwise there was no match.
+        Err(Error::NoMatchingDisplayMode(
+            display.uuid().to_string(),
+            serialize_to_string(format, &config)?,
+        ))
     }
 }
 
@@ -552,9 +576,15 @@ fn configure_displays<DS: DisplayState>(
     // Determine that we can find appropriate display modes for each
     // configuration before we start configuring.
     let mut selected_modes = HashMap::new();
+    let displays = display_state.get_displays();
+
     for (uuid, config) in &config_group.configs {
-        let display = display_state
-            .get_displays()
+        // Skip selecting a mode for mirrored displays; they will inherit the
+        // mirrored display's mode
+        if config.mirror_of.is_some() {
+            continue;
+        }
+        let display = displays
             .get(uuid)
             .expect("Match display somehow missing display configuration");
         let mode = select_mode(display, config, format)?;
@@ -568,21 +598,40 @@ fn configure_displays<DS: DisplayState>(
 
     let mut cfgtxn = display_state.configure()?;
     for (uuid, config) in &config_group.configs {
-        if let Some(false) = config.enabled {
-            info!("For display {} has been disabled.", &uuid);
-            // Unwrap is okay as we just checked that there is a value.
-            cfgtxn.set_enabled(uuid, false)?;
-            // TODO Does it make sense to skip the rest?
+        // First handle mirroring configurations.
+        if let Some(mirror_of_uuid) = &config.mirror_of {
+            info!(
+                "Setting display {} to mirror display {}",
+                uuid, mirror_of_uuid
+            );
+            cfgtxn.set_mirroring(uuid, Some(mirror_of_uuid))?;
+            // When mirroring is set, we skip other configuration options except 'enabled'
+            if let Some(false) = config.enabled {
+                info!("Display {} has been disabled.", uuid);
+                cfgtxn.set_enabled(uuid, false)?;
+            }
+            // As the display will inherit the remaining options,
+            // we can continue on to the next display.
             continue;
         }
+        // Proceed with non-mirroring configuration.
+        if let Some(false) = config.enabled {
+            info!("Display {} has been disabled.", uuid);
+            cfgtxn.set_enabled(uuid, false)?;
+            // Skip the rest of the configuration for disabled displays
+            continue;
+        }
+
+        // If not mirroring, disable.
+        info!("Disabling mirroring for display {}", uuid);
+        cfgtxn.set_mirroring(uuid, None)?;
 
         // TODO roll back rotation if later steps fail?
         if let Some(rotation) = config.rotation {
             info!(
                 "For display {}, using rotation of {} degrees.",
-                &uuid, rotation
+                uuid, rotation
             );
-            // Unwrap is okay as we just checked that there is a value.
             cfgtxn.set_rotation(uuid, rotation)?
         }
 
@@ -590,8 +639,7 @@ fn configure_displays<DS: DisplayState>(
         cfgtxn.set_mode(uuid, selected_modes.get(uuid).unwrap())?;
 
         if let Some(origin) = &config.origin {
-            info!("For display {}, using {} as origin.", &uuid, origin);
-            // Unwrap is okay as we just checked that there is a value.
+            info!("For display {}, using {} as origin.", uuid, origin);
             cfgtxn.set_origin(uuid, origin)?
         }
     }
@@ -610,16 +658,28 @@ fn state_to_config<DS: DisplayState>(display_state: &DS) -> ConfigGroups {
         .get_displays()
         .iter()
         .map(|(uuid, display)| {
-            let mode = display.current_mode();
-            Config {
+            let config = Config {
                 uuid: uuid.clone(),
-                enabled: Some(display.enabled()),
-                origin: Some(display.origin().clone()),
-                extents: Some(mode.extents().clone()),
-                scaled: Some(mode.scaled()),
-                frequency: Some(mode.frequency()),
-                color_depth: Some(mode.color_depth()),
-                rotation: Some(display.rotation()),
+                ..Config::default()
+            };
+            let mirror_of = display.mirror_of().map(|s| s.to_string());
+            if mirror_of.is_some() {
+                Config {
+                    mirror_of: mirror_of,
+                    ..config
+                }
+            } else {
+                let mode = display.current_mode();
+                Config {
+                    enabled: Some(display.enabled()),
+                    origin: Some(display.origin().clone()),
+                    extents: Some(mode.extents().clone()),
+                    scaled: Some(mode.scaled()),
+                    frequency: Some(mode.frequency()),
+                    color_depth: Some(mode.color_depth()),
+                    rotation: Some(display.rotation()),
+                    ..config
+                }
             }
         })
         .collect();

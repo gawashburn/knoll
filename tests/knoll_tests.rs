@@ -2,10 +2,17 @@
 extern crate knoll;
 
 use coverage_helper::test;
+use knoll::config::ConfigGroups;
 use knoll::displays::DisplayState;
+use knoll::displays::Point;
 use knoll::fake_displays::FakeDisplayState;
 use knoll::knoll::{run, Error};
 use knoll::real_displays::*;
+use ron::{
+    de::from_str,
+    ser::{to_string_pretty, PrettyConfig},
+};
+use serial_test::serial;
 use std::io::{Read, Write};
 use tempfile::tempdir;
 
@@ -57,7 +64,9 @@ fn run_knoll<DS: DisplayState>(
     let mut file_err =
         std::fs::File::open(err_path).expect("Failed to open temporary file for stderr.");
     let mut string_err = String::new();
-    file_err.read_to_string(&mut string_err).unwrap();
+    file_err
+        .read_to_string(&mut string_err)
+        .expect("Failed to read stderr file.");
 
     (opt_error, String::from_utf8(vec_out).unwrap(), string_err)
 }
@@ -75,6 +84,7 @@ fn run_knoll_fake(args: Vec<&str>, input: Option<String>) -> (Option<Error>, Str
 }
 
 #[test]
+#[serial]
 /// Test the knoll --help command
 fn test_help() {
     let (opt_err, _, _) = run_knoll_real(vec!["knoll", "--help"], None);
@@ -86,6 +96,7 @@ fn test_help() {
 }
 
 #[test]
+#[serial]
 /// Test the knoll --version command
 fn test_version() {
     let (opt_err, _, _) = run_knoll_real(vec!["knoll", "--version"], None);
@@ -97,37 +108,118 @@ fn test_version() {
 }
 
 #[test]
+#[serial]
 /// Test the default knoll command behavior with real displays.
 fn test_real_default() {
     let (opt_err, stdout, stderr) = run_knoll_real(vec!["knoll", "-vvv"], None);
     // Verify that no error occurred.
     assert!(opt_err.is_none());
     // Verify that no display configuration took place.
-    assert!(!stderr.contains("Configuration complete."));
+    assert!(
+        !stderr.contains("Configuration complete."),
+        "Expected no configuration message in stderr, got:\n {}",
+        stderr
+    );
     // Run idempotency test.
     let (opt_err, stdout_new, stderr) = run_knoll_real(vec!["knoll", "-vvv"], Some(stdout.clone()));
     // Verify that no error occurred.
     assert!(opt_err.is_none());
     // Verify that display configuration did happen.
-    assert!(stderr.contains("Configuration complete."));
+    assert!(
+        stderr.contains("Configuration complete."),
+        "Expected configuration message in stderr, got:\n {}",
+        stderr
+    );
     // Results should be unchanged.
     assert_eq!(stdout, stdout_new);
 }
 
 #[test]
+#[serial]
 /// Test the default knoll list command behavior with real displays.
 fn test_real_list() {
     run_knoll_real(vec!["knoll", "list"], None);
 }
 
 #[test]
+#[serial]
 /// Test the default knoll command behavior with fake displays.
 fn test_fake_default() {
     run_knoll_fake(vec!["knoll", "-vvv"], None);
 }
 
 #[test]
+#[serial]
 /// Test the default knoll list command behavior with fake displays.
 fn test_fake_list() {
     run_knoll_fake(vec!["knoll", "list"], None);
+}
+
+#[test]
+#[serial]
+/// Test pipeline mode with a non-existent display UUID to trigger a
+/// NoMatchingConfigGroup error.
+fn test_unknown_uuid() {
+    // Construct a config for a display UUID that is unlikely to exist.
+    let uuid = "00000000000000000000000000000000";
+    let config = format!("[ [ ( uuid: \"{}\" ) ] ]", uuid);
+    let (opt_err, _stdout, _stderr) = run_knoll_real(vec!["knoll", "--format=ron"], Some(config));
+    match opt_err {
+        Some(Error::NoMatchingConfigGroup(uuids)) => {
+            // Verify that the UUID is the one we expected.
+            assert!(!uuids.contains(&uuid.to_string()));
+        }
+        _ => panic!("Unexpected error: {:?}", opt_err),
+    }
+}
+
+#[test]
+#[serial]
+/// Test pipeline mode with duplicate display entries triggers a
+/// DuplicateDisplays config error.
+fn test_duplicate_config_entries() {
+    // Construct a config with the same UUID twice to cause DuplicateDisplays.
+    let uuid = "00000000000000000000000000000000";
+    let entry = format!("( uuid: \"{}\" )", uuid);
+    let config = format!("[ [ {}, {} ] ]", entry, entry);
+    let (opt_err, _stdout, _stderr) = run_knoll_real(vec!["knoll", "--format=ron"], Some(config));
+    match opt_err {
+        Some(Error::Config(knoll::valid_config::Error::DuplicateDisplays(dups))) => {
+            assert!(dups.contains(uuid));
+        }
+        _ => panic!("Expected DuplicateDisplays config error, got {:?}", opt_err),
+    }
+}
+
+#[test]
+#[serial]
+/// Test that modifying extents of display at origin (0,0) to a huge value triggers
+/// an error finding a matching mode.
+fn test_extents_too_large() {
+    // Obtain current configuration in RON format.
+    let (opt_err, stdout, _stderr) = run_knoll_real(vec!["knoll", "--format=ron"], None);
+    assert!(opt_err.is_none());
+    // Deserialize the configuration for editing.
+    let mut groups: ConfigGroups = from_str(&stdout).expect("Invalid RON output");
+    // Modify extents for any display at origin (0,0).
+    let size = 1000000;
+    for group in &mut groups.groups {
+        for cfg in &mut group.configs {
+            if cfg.origin == Some(Point { x: 0, y: 0 }) {
+                cfg.extents = Some(Point { x: size, y: size });
+            }
+        }
+    }
+    // Serialize back to RON text.
+    let modified =
+        to_string_pretty(&groups, PrettyConfig::default()).expect("RON serialization failed");
+    // Run with modified configuration.
+    let (opt_err2, _stdout2, _stderr2) =
+        run_knoll_real(vec!["knoll", "--format=ron"], Some(modified));
+    match opt_err2 {
+        Some(Error::NoMatchingDisplayMode(_uuid, msg)) => {
+            assert!(msg.contains(size.to_string().as_str()));
+        }
+        _ => panic!("Expected NoMatchingDisplayMode error, got {:?}", opt_err2),
+    }
 }

@@ -10,7 +10,7 @@ use std::cmp::{Eq, Ord, Ordering, PartialEq, PartialOrd};
 use std::fmt::Formatter;
 use std::hash::{Hash, Hasher};
 
-use crate::config::*;
+use crate::config::{Config, ConfigGroup, ConfigGroups};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -26,6 +26,11 @@ pub enum Error {
     DuplicateGroups(HashSet<ValidConfigGroup>),
     /// Reported when a configuration group contains no displays.
     EmptyGroup,
+    /// Reported when a display with mirror_of set also has other display options set,
+    /// which are not compatible with mirroring.
+    InvalidMirrorConfig(String),
+    /// Reported when a display is mirroring another display that itself is mirroring.
+    MirrorOfMirror(String, String),
 }
 
 impl std::fmt::Display for Error {
@@ -61,6 +66,20 @@ impl std::fmt::Display for Error {
                 )
             }
             Error::EmptyGroup => write!(f, "A configuration group is empty."),
+            Error::InvalidMirrorConfig(uuid) => write!(
+                f,
+                "A display with UUID {} has the mirror_of option set but also \
+                has other display options set, which are not compatible with \
+                mirroring.",
+                uuid
+            ),
+            Error::MirrorOfMirror(uuid, target_uuid) => write!(
+                f,
+                "A display with UUID {} is configured to mirror the display \
+                with UUID {}, however that display is itself already mirroring \
+                another display.",
+                uuid, target_uuid
+            ),
         }
     }
 }
@@ -146,6 +165,22 @@ impl ValidConfigGroup {
 
         for config in cg.configs {
             let uuid = &config.uuid;
+
+            // Check if mirror_of is set but other options have been set.
+            if let Some(_) = &config.mirror_of {
+                // When mirroring, only the uuid and mirror_of should have
+                // values.
+                if config.origin.is_some()
+                    || config.extents.is_some()
+                    || config.scaled.is_some()
+                    || config.frequency.is_some()
+                    || config.color_depth.is_some()
+                    || config.rotation.is_some()
+                {
+                    return Err(Error::InvalidMirrorConfig(uuid.clone()));
+                }
+            }
+
             if let Entry::Vacant(e) = configs.entry(uuid.clone()) {
                 e.insert(config);
             } else {
@@ -160,6 +195,17 @@ impl ValidConfigGroup {
         } else if configs.is_empty() {
             Err(Error::EmptyGroup)
         } else {
+            // Check that no display mirrors a display that is itself mirroring.
+            for (uuid, config) in &configs {
+                if let Some(target_uuid) = &config.mirror_of {
+                    if let Some(target_config) = configs.get(target_uuid) {
+                        if target_config.mirror_of.is_some() {
+                            return Err(Error::MirrorOfMirror(uuid.clone(), target_uuid.clone()));
+                        }
+                    }
+                }
+            }
+
             Ok(ValidConfigGroup {
                 uuids: configs.keys().cloned().collect(),
                 configs,
@@ -189,6 +235,7 @@ fn test_valid_config_from_duplicate() {
         configs: vec![
             Config {
                 uuid: "abcdef1234".to_owned(),
+                mirror_of: None,
                 enabled: Some(false),
                 origin: None,
                 extents: None,
@@ -199,7 +246,7 @@ fn test_valid_config_from_duplicate() {
             },
             Config {
                 uuid: "abcdef1234".to_owned(),
-
+                mirror_of: None,
                 enabled: Some(false),
                 origin: None,
                 extents: None,
@@ -215,13 +262,14 @@ fn test_valid_config_from_duplicate() {
             assert!(uuids.contains("abcdef1234"))
         }
         Err(_) => panic!("Unexpected error in validation."),
-        Ok(_) => panic!("Failed to detect empty configuration."),
+        Ok(_) => panic!("Failed to detect duplicate configuration."),
     }
 
     match ValidConfigGroup::from(ConfigGroup {
         configs: vec![
             Config {
                 uuid: "abcdef1234".to_owned(),
+                mirror_of: None,
                 enabled: Some(false),
                 origin: None,
                 extents: None,
@@ -232,6 +280,7 @@ fn test_valid_config_from_duplicate() {
             },
             Config {
                 uuid: "abcdef1234".to_owned(),
+                mirror_of: None,
                 enabled: Some(false),
                 origin: None,
                 extents: None,
@@ -242,7 +291,7 @@ fn test_valid_config_from_duplicate() {
             },
             Config {
                 uuid: "foobarbaz".to_owned(),
-
+                mirror_of: None,
                 enabled: Some(false),
                 origin: None,
                 extents: None,
@@ -253,6 +302,7 @@ fn test_valid_config_from_duplicate() {
             },
             Config {
                 uuid: "foobarbaz".to_owned(),
+                mirror_of: None,
                 enabled: Some(false),
                 origin: None,
                 extents: None,
@@ -269,7 +319,91 @@ fn test_valid_config_from_duplicate() {
             assert!(uuids.contains("foobarbaz"));
         }
         Err(_) => panic!("Unexpected error in validation."),
-        Ok(_) => panic!("Failed to detect empty configuration."),
+        Ok(_) => panic!("Failed to detect duplicate configuration."),
+    }
+}
+
+#[cfg(test)]
+mod valid_config_group_tests {
+    use super::*;
+    use crate::displays::Point;
+    use coverage_helper::test;
+
+    /// Test that `ValidConfigGroup::from` correctly reports an error for
+    /// mirror_of with incompatible display options.
+    #[test]
+    fn test_valid_config_from_invalid_mirror() {
+        match ValidConfigGroup::from(ConfigGroup {
+            configs: vec![Config {
+                uuid: "abcdef1234".to_owned(),
+                mirror_of: Some("5678defghi".to_owned()),
+                enabled: Some(true), // enabled is allowed with mirror_of
+                origin: Some(Point { x: 0, y: 0 }), // origin is not allowed with mirror_of
+                extents: None,
+                scaled: None,
+                frequency: None,
+                color_depth: None,
+                rotation: None,
+            }],
+        }) {
+            Err(Error::InvalidMirrorConfig(uuid)) => {
+                assert_eq!(uuid, "abcdef1234");
+            }
+            Err(_) => panic!("Unexpected error in validation."),
+            Ok(_) => panic!("Failed to detect invalid mirror configuration."),
+        }
+    }
+
+    /// Test that `ValidConfigGroup::from` correctly reports an error when
+    /// a display mirrors a display that itself is mirroring.
+    #[test]
+    fn test_valid_config_from_mirror_of_mirror() {
+        let cg = ConfigGroup {
+            configs: vec![
+                Config {
+                    uuid: "A".to_owned(),
+                    mirror_of: Some("B".to_owned()),
+                    enabled: Some(true),
+                    origin: None,
+                    extents: None,
+                    scaled: None,
+                    frequency: None,
+                    color_depth: None,
+                    rotation: None,
+                },
+                Config {
+                    uuid: "B".to_owned(),
+                    mirror_of: Some("C".to_owned()),
+                    enabled: Some(true),
+                    origin: None,
+                    extents: None,
+                    scaled: None,
+                    frequency: None,
+                    color_depth: None,
+                    rotation: None,
+                },
+                Config {
+                    uuid: "C".to_owned(),
+                    mirror_of: None,
+                    enabled: Some(true),
+                    origin: None,
+                    extents: None,
+                    scaled: None,
+                    frequency: None,
+                    color_depth: None,
+                    rotation: None,
+                },
+            ],
+        };
+
+        match ValidConfigGroup::from(cg) {
+            Err(Error::MirrorOfMirror(uuid, target_uuid)) => {
+                assert_eq!(uuid, "A");
+                assert_eq!(target_uuid, "B");
+            }
+            Err(_) => panic!("Unexpected error in mirror-of-mirror validation."),
+            Ok(_) => panic!("Failed to detect mirror-of-mirror configuration."),
+        }
     }
 }
 
@@ -308,53 +442,19 @@ pub fn validate_config_groups(cgs: ConfigGroups) -> Result<Vec<ValidConfigGroup>
 
 ////////////////////////////////////////////////////////////////////////////////
 
-/// Test that `validate_config_groups` detects duplicate configuration groups
-#[test]
-fn test_config_validation_duplicates() {
-    match validate_config_groups(ConfigGroups {
-        groups: vec![
-            ConfigGroup {
-                configs: vec![Config {
-                    uuid: "abcdef1234".to_owned(),
-                    enabled: Some(false),
-                    origin: None,
-                    extents: None,
-                    scaled: None,
-                    frequency: None,
-                    color_depth: None,
-                    rotation: None,
-                }],
-            },
-            ConfigGroup {
-                configs: vec![Config {
-                    uuid: "abcdef1234".to_owned(),
-                    enabled: Some(false),
-                    origin: None,
-                    extents: None,
-                    scaled: None,
-                    frequency: None,
-                    color_depth: None,
-                    rotation: None,
-                }],
-            },
-        ],
-    }) {
-        Err(Error::DuplicateGroups(groups)) => {
-            assert_eq!(groups.len(), 1);
-            assert!(groups
-                .iter()
-                .all(|cg| cg.uuids.len() == 1 && cg.uuids.contains("abcdef1234")))
-        }
-        Err(_) => panic!("Unexpected error in validation."),
-        Ok(_) => panic!("Failed to detect empty configuration."),
-    }
-
-    match validate_config_groups(ConfigGroups {
-        groups: vec![
-            ConfigGroup {
-                configs: vec![
-                    Config {
+#[cfg(test)]
+mod valid_config_groups_tests {
+    use super::*;
+    use coverage_helper::test;
+    /// Test that `validate_config_groups` detects duplicate configuration groups.
+    #[test]
+    fn test_config_validation_duplicates() {
+        match validate_config_groups(ConfigGroups {
+            groups: vec![
+                ConfigGroup {
+                    configs: vec![Config {
                         uuid: "abcdef1234".to_owned(),
+                        mirror_of: None,
                         enabled: Some(false),
                         origin: None,
                         extents: None,
@@ -362,33 +462,12 @@ fn test_config_validation_duplicates() {
                         frequency: None,
                         color_depth: None,
                         rotation: None,
-                    },
-                    Config {
-                        uuid: "foobarbaz".to_owned(),
-                        enabled: Some(false),
-                        origin: None,
-                        extents: None,
-                        scaled: None,
-                        frequency: None,
-                        color_depth: None,
-                        rotation: None,
-                    },
-                ],
-            },
-            ConfigGroup {
-                configs: vec![
-                    Config {
-                        uuid: "foobarbaz".to_owned(),
-                        enabled: Some(false),
-                        origin: None,
-                        extents: None,
-                        scaled: None,
-                        frequency: None,
-                        color_depth: None,
-                        rotation: None,
-                    },
-                    Config {
+                    }],
+                },
+                ConfigGroup {
+                    configs: vec![Config {
                         uuid: "abcdef1234".to_owned(),
+                        mirror_of: None,
                         enabled: Some(false),
                         origin: None,
                         extents: None,
@@ -396,46 +475,113 @@ fn test_config_validation_duplicates() {
                         frequency: None,
                         color_depth: None,
                         rotation: None,
-                    },
-                ],
-            },
-        ],
-    }) {
-        Err(Error::DuplicateGroups(groups)) => {
-            assert_eq!(groups.len(), 1);
-            assert!(groups.iter().all(|cg| cg.uuids.len() == 2
-                && cg.uuids.contains("abcdef1234")
-                && cg.uuids.contains("foobarbaz")));
+                    }],
+                },
+            ],
+        }) {
+            Err(Error::DuplicateGroups(groups)) => {
+                assert_eq!(groups.len(), 1);
+                assert!(groups
+                    .iter()
+                    .all(|cg| cg.uuids.len() == 1 && cg.uuids.contains("abcdef1234")))
+            }
+            Err(_) => panic!("Unexpected error in validation."),
+            Ok(_) => panic!("Failed to detect duplicate configuration groups."),
         }
-        Err(_) => panic!("Unexpected error in validation."),
-        Ok(_) => panic!("Failed to detect empty configuration."),
-    }
-}
 
-/// Test that sorting configuration groups works as expected.
-#[test]
-fn test_config_group_sorting() {
-    let configs = vec![
-        vec!["a"],
-        vec!["b"],
-        vec!["c"],
-        vec!["a", "b"],
-        vec!["a", "c"],
-        vec!["a", "b", "c"],
-    ];
-
-    fn convert(vec: Vec<&str>) -> ValidConfigGroup {
-        ValidConfigGroup {
-            uuids: BTreeSet::from_iter(vec.into_iter().map(String::from)),
-            configs: HashMap::new(),
+        match validate_config_groups(ConfigGroups {
+            groups: vec![
+                ConfigGroup {
+                    configs: vec![
+                        Config {
+                            uuid: "abcdef1234".to_owned(),
+                            mirror_of: None,
+                            enabled: Some(false),
+                            origin: None,
+                            extents: None,
+                            scaled: None,
+                            frequency: None,
+                            color_depth: None,
+                            rotation: None,
+                        },
+                        Config {
+                            uuid: "foobarbaz".to_owned(),
+                            mirror_of: None,
+                            enabled: Some(false),
+                            origin: None,
+                            extents: None,
+                            scaled: None,
+                            frequency: None,
+                            color_depth: None,
+                            rotation: None,
+                        },
+                    ],
+                },
+                ConfigGroup {
+                    configs: vec![
+                        Config {
+                            uuid: "foobarbaz".to_owned(),
+                            mirror_of: None,
+                            enabled: Some(false),
+                            origin: None,
+                            extents: None,
+                            scaled: None,
+                            frequency: None,
+                            color_depth: None,
+                            rotation: None,
+                        },
+                        Config {
+                            uuid: "abcdef1234".to_owned(),
+                            mirror_of: None,
+                            enabled: Some(false),
+                            origin: None,
+                            extents: None,
+                            scaled: None,
+                            frequency: None,
+                            color_depth: None,
+                            rotation: None,
+                        },
+                    ],
+                },
+            ],
+        }) {
+            Err(Error::DuplicateGroups(groups)) => {
+                assert_eq!(groups.len(), 1);
+                assert!(groups.iter().all(|cg| cg.uuids.len() == 2
+                    && cg.uuids.contains("abcdef1234")
+                    && cg.uuids.contains("foobarbaz")));
+            }
+            Err(_) => panic!("Unexpected error in validation."),
+            Ok(_) => panic!("Failed to detect duplicate configuration groups."),
         }
     }
 
-    let mut groups: Vec<ValidConfigGroup> = configs.into_iter().map(convert).collect();
-    groups.sort();
-    let group_uuids: Vec<BTreeSet<String>> = groups.iter().map(|vcg| vcg.uuids.clone()).collect();
-    assert_eq!(
-        format!("{:?}", group_uuids),
-        r#"[{"a", "b", "c"}, {"a", "b"}, {"a", "c"}, {"a"}, {"b"}, {"c"}]"#
-    );
+    /// Test that sorting configuration groups works as expected.
+    #[test]
+    fn test_config_group_sorting() {
+        let configs = vec![
+            vec!["a"],
+            vec!["b"],
+            vec!["c"],
+            vec!["a", "b"],
+            vec!["a", "c"],
+            vec!["a", "b", "c"],
+        ];
+
+        fn convert(vec: Vec<&str>) -> ValidConfigGroup {
+            ValidConfigGroup {
+                uuids: BTreeSet::from_iter(vec.into_iter().map(String::from)),
+                configs: HashMap::new(),
+            }
+        }
+
+        let mut groups: Vec<ValidConfigGroup> = configs.into_iter().map(convert).collect();
+        groups.sort();
+        let group_uuids: Vec<BTreeSet<String>> =
+            groups.iter().map(|vcg| vcg.uuids.clone()).collect();
+        assert_eq!(
+            format!("{:?}", group_uuids),
+            r#"[{"a", "b", "c"}, {"a", "b"}, {"a", "c"}, {"a"}, {"b"}, {"c"}]"#
+        );
+    }
 }
