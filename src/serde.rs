@@ -126,7 +126,7 @@ pub fn serialize<S: Serialize, W: Write>(format: Format, s: &S, writer: W) -> Re
     match format {
         Format::Ron => {
             let pretty_config = ron::ser::PrettyConfig::new();
-            ron::ser::to_writer_pretty(writer, s, pretty_config)?
+            ron::Options::default().to_io_writer_pretty(writer, s, pretty_config)?
         }
         Format::Json => serde_json::ser::to_writer_pretty(writer, s).map_err(Error::SerJson)?,
     }

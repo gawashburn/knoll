@@ -35,28 +35,27 @@ where
 /// Some basic sanity checking for `serialize_opt`.
 #[test]
 fn test_serialize_opt() {
-    let mut buffer = vec![];
     {
+        let mut buffer = String::new();
         let ron_pretty = ron::ser::PrettyConfig::default();
         let mut ron_ser = ron::ser::Serializer::new(&mut buffer, Some(ron_pretty))
             .expect("Constructing serializer should not fail.");
 
         serialize_opt(&Some(0), &mut ron_ser).expect("Serialization should not fail.");
+        assert_eq!(buffer, "0");
     }
-    assert_eq!(
-        String::from_utf8(buffer.clone()).expect("String should be valid UTF-8."),
-        "0"
-    );
 
-    buffer.clear();
     {
-        let mut json_ser = serde_json::ser::Serializer::new(&mut buffer);
-        serialize_opt(&Some(0), &mut json_ser).expect("Serialization should not fail.");
+        let mut buffer = vec![];
+        {
+            let mut json_ser = serde_json::ser::Serializer::new(&mut buffer);
+            serialize_opt(&Some(0), &mut json_ser).expect("Serialization should not fail.");
+        }
+        assert_eq!(
+            String::from_utf8(buffer.clone()).expect("String should be valid UTF-8."),
+            "0"
+        );
     }
-    assert_eq!(
-        String::from_utf8(buffer.clone()).expect("String should be valid UTF-8."),
-        "0"
-    );
 }
 
 /// Some basic sanity checking for `deserialize_opt`.
