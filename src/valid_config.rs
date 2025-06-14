@@ -31,6 +31,8 @@ pub enum Error {
     InvalidMirrorConfig(String),
     /// Reported when a display is mirroring another display that itself is mirroring.
     MirrorOfMirror(String, String),
+    /// Reported when a brightness value is outside the allowed range [0.0,1.0].
+    InvalidBrightness(String, f32),
 }
 
 impl std::fmt::Display for Error {
@@ -79,6 +81,11 @@ impl std::fmt::Display for Error {
                 with UUID {}, however that display is itself already mirroring \
                 another display.",
                 uuid, target_uuid
+            ),
+            Error::InvalidBrightness(uuid, value) => write!(
+                f,
+                "Display with UUID {} has invalid brightness {}. Brightness must be between 0.0 and 1.0.",
+                uuid, value
             ),
         }
     }
@@ -179,8 +186,18 @@ impl ValidConfigGroup {
                     || config.frequency.is_some()
                     || config.color_depth.is_some()
                     || config.rotation.is_some()
+                    // TODO would it make sense to allow brightness
+                    // to be configured distinctly for a mirror?
+                    || config.brightness.is_some()
                 {
                     return Err(Error::InvalidMirrorConfig(uuid.clone()));
+                }
+            }
+
+            // Check that the brightness range is valid.
+            if let Some(brightness) = config.brightness {
+                if brightness < 0.0 || brightness > 1.0 {
+                    return Err(Error::InvalidBrightness(uuid.clone(), brightness));
                 }
             }
 
@@ -240,25 +257,13 @@ fn test_valid_config_from_duplicate() {
         configs: vec![
             Config {
                 uuid: "abcdef1234".to_owned(),
-                mirror_of: None,
                 enabled: Some(false),
-                origin: None,
-                extents: None,
-                scaled: None,
-                frequency: None,
-                color_depth: None,
-                rotation: None,
+                ..Config::default()
             },
             Config {
                 uuid: "abcdef1234".to_owned(),
-                mirror_of: None,
                 enabled: Some(false),
-                origin: None,
-                extents: None,
-                scaled: None,
-                frequency: None,
-                color_depth: None,
-                rotation: None,
+                ..Config::default()
             },
         ],
     });
@@ -273,47 +278,23 @@ fn test_valid_config_from_duplicate() {
         configs: vec![
             Config {
                 uuid: "abcdef1234".to_owned(),
-                mirror_of: None,
                 enabled: Some(false),
-                origin: None,
-                extents: None,
-                scaled: None,
-                frequency: None,
-                color_depth: None,
-                rotation: None,
+                ..Config::default()
             },
             Config {
                 uuid: "abcdef1234".to_owned(),
-                mirror_of: None,
                 enabled: Some(false),
-                origin: None,
-                extents: None,
-                scaled: None,
-                frequency: None,
-                color_depth: None,
-                rotation: None,
+                ..Config::default()
             },
             Config {
                 uuid: "foobarbaz".to_owned(),
-                mirror_of: None,
                 enabled: Some(false),
-                origin: None,
-                extents: None,
-                scaled: None,
-                frequency: None,
-                color_depth: None,
-                rotation: None,
+                ..Config::default()
             },
             Config {
                 uuid: "foobarbaz".to_owned(),
-                mirror_of: None,
                 enabled: Some(false),
-                origin: None,
-                extents: None,
-                scaled: None,
-                frequency: None,
-                color_depth: None,
-                rotation: None,
+                ..Config::default()
             },
         ],
     });
@@ -331,7 +312,6 @@ fn test_valid_config_from_duplicate() {
 mod valid_config_group_tests {
     use super::*;
     use crate::displays::Point;
-    use coverage_helper::test;
 
     /// Test that `ValidConfigGroup::from` correctly reports an error for
     /// mirror_of with incompatible display options.
@@ -343,11 +323,7 @@ mod valid_config_group_tests {
                 mirror_of: Some("5678defghi".to_owned()),
                 enabled: Some(true), // enabled is allowed with mirror_of
                 origin: Some(Point { x: 0, y: 0 }), // origin is not allowed with mirror_of
-                extents: None,
-                scaled: None,
-                frequency: None,
-                color_depth: None,
-                rotation: None,
+                ..Config::default()
             }],
         });
         assert!(
@@ -369,34 +345,18 @@ mod valid_config_group_tests {
                     uuid: "A".to_owned(),
                     mirror_of: Some("B".to_owned()),
                     enabled: Some(true),
-                    origin: None,
-                    extents: None,
-                    scaled: None,
-                    frequency: None,
-                    color_depth: None,
-                    rotation: None,
+                    ..Config::default()
                 },
                 Config {
                     uuid: "B".to_owned(),
                     mirror_of: Some("C".to_owned()),
                     enabled: Some(true),
-                    origin: None,
-                    extents: None,
-                    scaled: None,
-                    frequency: None,
-                    color_depth: None,
-                    rotation: None,
+                    ..Config::default()
                 },
                 Config {
                     uuid: "C".to_owned(),
-                    mirror_of: None,
                     enabled: Some(true),
-                    origin: None,
-                    extents: None,
-                    scaled: None,
-                    frequency: None,
-                    color_depth: None,
-                    rotation: None,
+                    ..Config::default()
                 },
             ],
         };
@@ -405,6 +365,37 @@ mod valid_config_group_tests {
         assert!(
             matches!(result, Err(Error::MirrorOfMirror(uuid, target_uuid)) if uuid == "A" && target_uuid == "B"),
             "Failed to detect mirror-of-mirror configuration."
+        );
+    }
+
+    /// Test that `ValidConfigGroup::from` correctly reports an error when
+    /// brightness is outside the allowed range [0.0, 1.0].
+    #[test]
+    fn test_valid_config_from_invalid_brightness() {
+        // Below valid range
+        let result_low = ValidConfigGroup::from(ConfigGroup {
+            configs: vec![Config {
+                uuid: "low-bright".to_owned(),
+                brightness: Some(-0.1),
+                ..Config::default()
+            }],
+        });
+        assert!(
+            matches!(result_low, Err(Error::InvalidBrightness(uuid, value)) if uuid == "low-bright" && value == -0.1),
+            "Failed to detect brightness below 0.0."
+        );
+
+        // Above valid range
+        let result_high = ValidConfigGroup::from(ConfigGroup {
+            configs: vec![Config {
+                uuid: "high-bright".to_owned(),
+                brightness: Some(1.2),
+                ..Config::default()
+            }],
+        });
+        assert!(
+            matches!(result_high, Err(Error::InvalidBrightness(uuid, value)) if uuid == "high-bright" && value == 1.2),
+            "Failed to detect brightness above 1.0."
         );
     }
 }
@@ -448,7 +439,6 @@ pub fn validate_config_groups(cgs: ConfigGroups) -> Result<Vec<ValidConfigGroup>
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod valid_config_groups_tests {
     use super::*;
-    use coverage_helper::test;
     /// Test that `validate_config_groups` detects duplicate configuration groups.
     #[test]
     fn test_config_validation_duplicates() {
@@ -457,27 +447,15 @@ mod valid_config_groups_tests {
                 ConfigGroup {
                     configs: vec![Config {
                         uuid: "abcdef1234".to_owned(),
-                        mirror_of: None,
                         enabled: Some(false),
-                        origin: None,
-                        extents: None,
-                        scaled: None,
-                        frequency: None,
-                        color_depth: None,
-                        rotation: None,
+                        ..Config::default()
                     }],
                 },
                 ConfigGroup {
                     configs: vec![Config {
                         uuid: "abcdef1234".to_owned(),
-                        mirror_of: None,
                         enabled: Some(false),
-                        origin: None,
-                        extents: None,
-                        scaled: None,
-                        frequency: None,
-                        color_depth: None,
-                        rotation: None,
+                        ..Config::default()
                     }],
                 },
             ],
@@ -495,25 +473,13 @@ mod valid_config_groups_tests {
                     configs: vec![
                         Config {
                             uuid: "abcdef1234".to_owned(),
-                            mirror_of: None,
                             enabled: Some(false),
-                            origin: None,
-                            extents: None,
-                            scaled: None,
-                            frequency: None,
-                            color_depth: None,
-                            rotation: None,
+                            ..Config::default()
                         },
                         Config {
                             uuid: "foobarbaz".to_owned(),
-                            mirror_of: None,
                             enabled: Some(false),
-                            origin: None,
-                            extents: None,
-                            scaled: None,
-                            frequency: None,
-                            color_depth: None,
-                            rotation: None,
+                            ..Config::default()
                         },
                     ],
                 },
@@ -521,25 +487,13 @@ mod valid_config_groups_tests {
                     configs: vec![
                         Config {
                             uuid: "foobarbaz".to_owned(),
-                            mirror_of: None,
                             enabled: Some(false),
-                            origin: None,
-                            extents: None,
-                            scaled: None,
-                            frequency: None,
-                            color_depth: None,
-                            rotation: None,
+                            ..Config::default()
                         },
                         Config {
                             uuid: "abcdef1234".to_owned(),
-                            mirror_of: None,
                             enabled: Some(false),
-                            origin: None,
-                            extents: None,
-                            scaled: None,
-                            frequency: None,
-                            color_depth: None,
-                            rotation: None,
+                            ..Config::default()
                         },
                     ],
                 },

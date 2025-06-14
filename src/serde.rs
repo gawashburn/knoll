@@ -99,7 +99,6 @@ impl Format {
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod format_tests {
     use super::*;
-    use coverage_helper::test;
     use std::error::Error as StdError;
 
     #[test]
@@ -154,7 +153,6 @@ pub fn deserialize<'a, D: Deserialize<'a>>(format: Format, str: &'a str) -> Resu
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod serialization_tests {
     use super::*;
-    use coverage_helper::test;
     use serde::{Deserialize, Serialize};
     use std::error::Error as StdError;
 

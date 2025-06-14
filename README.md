@@ -464,6 +464,13 @@ A configuration may contain the following fields:
         * RON syntax: `mirror_of: "b00184f4c1ee4cdf8ccfea3fca2f93b2"`.
         * Nix syntax: `mirror_of = "b00184f4c1ee4cdf8ccfea3fca2f93b2"`.
 
+* `brightness`
+    * This specifies the current or requested brightness of the display as a
+      floating point value between 0.0 (dim) and 1.0 (maximum brightness).
+        * JSON syntax: `"brightness": 1.0`.
+        * RON syntax: `brightness: 1.0`.
+        * Nix syntax: `brightness = 1.0`.
+
 ## Future work
 
 So far knoll has been working successfully for my specific use cases. However,
@@ -477,7 +484,7 @@ there is still room for additional improvements:
 * Detect display configurations with overlapping displays or gaps to warn
   that the configuration is not stable.
 * Support UUID abbreviations similar to git hash abbreviations.
-* Support configuring the brightness, gamma function, etc. for a display.
+* Support configuring the linear brightness, gamma function, etc. for a display.
 * It seems plausible that knoll could be extended to support Windows, XOrg,
   Wayland, etc. It is just a matter of finding the appropriate APIs and perhaps
   making some additional generalizations to the configuration data structures.

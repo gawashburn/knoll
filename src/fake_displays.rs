@@ -44,6 +44,7 @@ enum FakeDisplayEdit {
     SetOrigin(Point),
     SetEnabled(bool),
     SetMirroredDisplay(Option<String>),
+    SetBrightness(f32),
 }
 
 pub struct FakeDisplayConfigTransaction {
@@ -112,6 +113,13 @@ impl DisplayConfigTransaction for FakeDisplayConfigTransaction {
         self.record_edit(uuid, FakeDisplayEdit::SetEnabled(enabled))
     }
 
+    fn set_brightness(&mut self, uuid: &str, brightness: f32) -> Result<(), Error> {
+        if brightness < 0.0 || brightness > 1.0 {
+            return Err(Error::InvalidBrightness(brightness));
+        }
+        self.record_edit(uuid, FakeDisplayEdit::SetBrightness(brightness))
+    }
+
     fn commit(mut self) -> Result<(), Error> {
         if self.dropped {
             return Err(Error::InvalidTransactionState);
@@ -160,6 +168,7 @@ pub struct FakeDisplay {
     rotation: Rotation,
     mode: FakeDisplayMode,
     modes: Vec<FakeDisplayMode>,
+    brightness: f32,
 }
 
 impl FakeDisplay {
@@ -185,6 +194,9 @@ impl FakeDisplay {
             FakeDisplayEdit::SetMirroredDisplay(mirror_uuid) => {
                 self.mirrored_display = mirror_uuid;
             }
+            FakeDisplayEdit::SetBrightness(b) => {
+                self.brightness = b;
+            }
         }
     }
 }
@@ -208,6 +220,10 @@ impl Display for FakeDisplay {
 
     fn rotation(&self) -> Rotation {
         self.rotation
+    }
+
+    fn brightness(&self) -> f32 {
+        self.brightness
     }
 
     type DisplayModeType = FakeDisplayMode;

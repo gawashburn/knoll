@@ -348,6 +348,12 @@ unsafe extern "C" {
 
     /// Discovered through disassembly of the SkyLight framework.
     fn SLSSetDisplayRotation(display_id: CGDirectDisplayID, rotation: i32) -> CGError;
+    fn SLSSetDisplayBrightness(display_id: CGDirectDisplayID, brightness: i32) -> CGError;
+
+    /// Discovered in https://github.com/MonitorControl/MonitorControl/blob/81170cd7fc582470f3bb75feeb18d0405c2a9a6e/MonitorControl/Support/Bridging-Header.h#L17
+    fn DisplayServicesGetBrightness(display_id: CGDirectDisplayID, brightness: *mut f32)
+    -> CGError;
+    fn DisplayServicesSetBrightness(display_id: CGDirectDisplayID, brightness: f32) -> CGError;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -615,4 +621,12 @@ pub fn cg_display_mirrors_display(display_id: DisplayID) -> Option<DisplayID> {
 }
 pub fn sls_set_display_rotation(display_id: DisplayID, rotation: i32) -> CGError {
     unsafe { SLSSetDisplayRotation(display_id.id, rotation) }
+}
+
+pub fn display_services_get_brightness(display_id: DisplayID, brightness: &mut f32) -> CGError {
+    unsafe { DisplayServicesGetBrightness(display_id.id, brightness) }
+}
+
+pub fn display_services_set_brightness(display_id: DisplayID, brightness: f32) -> CGError {
+    unsafe { DisplayServicesSetBrightness(display_id.id, brightness) }
 }

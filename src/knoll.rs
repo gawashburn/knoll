@@ -635,6 +635,15 @@ fn configure_displays<DS: DisplayState>(
             cfgtxn.set_rotation(uuid, rotation)?
         }
 
+        // TODO roll back brightness if later steps fail?
+        if let Some(brightness) = config.brightness {
+            info!(
+                "For display {}, setting brightness to {}.",
+                uuid, brightness
+            );
+            cfgtxn.set_brightness(uuid, brightness)?;
+        }
+
         // Unwrap is safe as we know there is a display mode for each UUID.
         cfgtxn.set_mode(uuid, selected_modes.get(uuid).unwrap())?;
 
@@ -678,6 +687,7 @@ fn state_to_config<DS: DisplayState>(display_state: &DS) -> ConfigGroups {
                     frequency: Some(mode.frequency()),
                     color_depth: Some(mode.color_depth()),
                     rotation: Some(display.rotation()),
+                    brightness: Some(display.brightness()),
                     ..config
                 }
             }
@@ -781,35 +791,36 @@ fn daemon_command<DS: DisplayState>(
     wait_period: std::time::Duration,
 ) -> Result<(), Error> {
     // Spawn a thread to watch for reconfiguration changes.
-    std::thread::spawn(move || 'loop_label: loop {
-        let mut reconfig_in_progress = match RECONFIGURE_LOCK.lock() {
-            Ok(mutex) => mutex,
-            Err(pe) => {
-                error!("Error obtaining reconfiguration lock: {}", pe);
-                continue;
-            }
-        };
-
-        // Wait for the callback to notify that reconfiguration should take place.
-        while !*reconfig_in_progress {
-            reconfig_in_progress = match RECONFIGURE_CONDVAR.wait(reconfig_in_progress) {
-                Ok(b) => b,
+    std::thread::spawn(move || {
+        'loop_label: loop {
+            let mut reconfig_in_progress = match RECONFIGURE_LOCK.lock() {
+                Ok(mutex) => mutex,
                 Err(pe) => {
-                    error!(
-                        "Error while waiting for a reconfiguration notification: {}",
-                        pe
-                    );
-                    continue 'loop_label;
+                    error!("Error obtaining reconfiguration lock: {}", pe);
+                    continue;
+                }
+            };
+
+            // Wait for the callback to notify that reconfiguration should take place.
+            while !*reconfig_in_progress {
+                reconfig_in_progress = match RECONFIGURE_CONDVAR.wait(reconfig_in_progress) {
+                    Ok(b) => b,
+                    Err(pe) => {
+                        error!(
+                            "Error while waiting for a reconfiguration notification: {}",
+                            pe
+                        );
+                        continue 'loop_label;
+                    }
                 }
             }
-        }
 
-        // Wait for the display configuration to quiesce.
-        std::thread::sleep(wait_period);
-        info!("Reconfiguring displays.");
+            // Wait for the display configuration to quiesce.
+            std::thread::sleep(wait_period);
+            info!("Reconfiguring displays.");
 
-        // As close as I think we can get to monadic binding.
-        let result = config_reader
+            // As close as I think we can get to monadic binding.
+            let result = config_reader
             .groups()
             .and_then(|config_groups: Vec<ValidConfigGroup>| {
                 if config_groups.is_empty() {
@@ -833,17 +844,18 @@ fn daemon_command<DS: DisplayState>(
                 }
             });
 
-        match result {
-            Err(e) => {
-                error!("{}", e);
-            }
-            Ok(()) => {
-                info!("Reconfiguration successful.");
-            }
-        };
+            match result {
+                Err(e) => {
+                    error!("{}", e);
+                }
+                Ok(()) => {
+                    info!("Reconfiguration successful.");
+                }
+            };
 
-        // Reconfiguration has completed.
-        *reconfig_in_progress = false;
+            // Reconfiguration has completed.
+            *reconfig_in_progress = false;
+        }
     });
 
     // Install the display reconfiguration callback.

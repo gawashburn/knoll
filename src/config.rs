@@ -5,7 +5,7 @@ use crate::displays::Rotation;
 ///! Data structures used for representing the current state of the attached
 /// displays as well as requesting changes to that configuration.
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::cmp::{Eq, PartialEq};
+use std::cmp::PartialEq;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -78,7 +78,7 @@ fn test_deserialize_opt() {
 ////////////////////////////////////////////////////////////////////////////////
 
 /// A Config describes how to configure an individual display.
-#[derive(Debug, PartialEq, Eq, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Default, Serialize, Deserialize)]
 pub struct Config {
     pub uuid: String,
     // TODO Is there a way to avoid repeating the same attributes?
@@ -140,10 +140,17 @@ pub struct Config {
         default
     )]
     pub rotation: Option<Rotation>,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "serialize_opt",
+        deserialize_with = "deserialize_opt",
+        default
+    )]
+    pub brightness: Option<f32>,
 }
 
 /// A ConfigGroup describes how to configure a group attached of displays.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ConfigGroup {
     /// Order is irrelevant, but it would require some additional effort
@@ -153,7 +160,7 @@ pub struct ConfigGroup {
 
 /// ConfigGroups is simply a collection of ConfigGroups for different
 /// possible system configurations
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ConfigGroups {
     /// Order is irrelevant, but it would require some additional effort
@@ -178,6 +185,7 @@ fn test_serialization() {
         frequency: Some(60),
         color_depth: Some(8),
         rotation: Some(Rotation::Ninety),
+        brightness: Some(1.0),
     };
 
     let c1_json_str =
@@ -207,7 +215,8 @@ fn test_serialization() {
   "scaled": true,
   "frequency": 60,
   "color_depth": 8,
-  "rotation": 90
+  "rotation": 90,
+  "brightness": 1.0
 }"#
     );
 
@@ -235,6 +244,7 @@ fn test_serialization() {
     frequency: 60,
     color_depth: 8,
     rotation: 90,
+    brightness: 1.0,
 )"#
     );
 
@@ -266,7 +276,8 @@ fn test_serialization() {
     "scaled": true,
     "frequency": 60,
     "color_depth": 8,
-    "rotation": 90
+    "rotation": 90,
+    "brightness": 1.0
   }
 ]"#
     );
@@ -288,6 +299,7 @@ fn test_serialization() {
         frequency: 60,
         color_depth: 8,
         rotation: 90,
+        brightness: 1.0,
     ),
 ]"#
     );
@@ -341,7 +353,8 @@ fn test_serialization() {
       "scaled": true,
       "frequency": 60,
       "color_depth": 8,
-      "rotation": 90
+      "rotation": 90,
+      "brightness": 1.0
     }
   ],
   [
@@ -369,6 +382,7 @@ fn test_serialization() {
             frequency: 60,
             color_depth: 8,
             rotation: 90,
+            brightness: 1.0,
         ),
     ],
     [
@@ -433,6 +447,7 @@ fn test_deserialization() {
             frequency: None,
             color_depth: None,
             rotation: None,
+            brightness: None,
         }
     );
 
@@ -451,6 +466,7 @@ fn test_deserialization() {
             frequency: None,
             color_depth: None,
             rotation: None,
+            brightness: None,
         }
     );
 
@@ -468,6 +484,7 @@ fn test_deserialization() {
             frequency: None,
             color_depth: None,
             rotation: None,
+            brightness: None,
         }
     );
 
@@ -485,6 +502,7 @@ fn test_deserialization() {
             frequency: None,
             color_depth: None,
             rotation: None,
+            brightness: None,
         }
     );
 
@@ -502,6 +520,7 @@ fn test_deserialization() {
             frequency: None,
             color_depth: None,
             rotation: None,
+            brightness: None,
         }
     );
 
@@ -519,6 +538,7 @@ fn test_deserialization() {
             frequency: None,
             color_depth: None,
             rotation: None,
+            brightness: None,
         }
     );
 
@@ -537,6 +557,7 @@ fn test_deserialization() {
             frequency: None,
             color_depth: None,
             rotation: Some(Rotation::OneEighty),
+            brightness: None,
         }
     );
 
@@ -565,6 +586,7 @@ fn test_deserialization() {
             frequency: None,
             color_depth: None,
             rotation: None,
+            brightness: None,
         }
     );
 
@@ -583,6 +605,7 @@ fn test_deserialization() {
             frequency: None,
             color_depth: None,
             rotation: None,
+            brightness: None,
         }
     );
 
@@ -601,6 +624,7 @@ fn test_deserialization() {
                 frequency: None,
                 color_depth: None,
                 rotation: None,
+                brightness: None,
             }]
         }
     );
@@ -620,6 +644,7 @@ fn test_deserialization() {
                 frequency: None,
                 color_depth: None,
                 rotation: None,
+                brightness: None,
             }]
         }
     );
@@ -640,6 +665,7 @@ fn test_deserialization() {
                     frequency: None,
                     color_depth: None,
                     rotation: None,
+                    brightness: None,
                 }]
             }]
         }

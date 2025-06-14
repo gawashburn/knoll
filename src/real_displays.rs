@@ -128,6 +128,8 @@ pub struct RealDisplayConfigTransaction {
     /// they will not be applied.  This is not strictly necessary, but
     /// it presents a more uniform behavior for the interface.
     rotations: HashMap<DisplayID, Rotation>,
+    /// Keep track of requested brightness changes.
+    brightness_map: HashMap<DisplayID, f32>,
     /// The active configuration reference for this transaction.
     config_ref: CGDisplayConfigRef,
     /// Keep track whether the transaction has been dropped.
@@ -157,6 +159,7 @@ impl RealDisplayConfigTransaction {
                 .map(|(uuid, real_display)| (uuid.clone(), real_display.display_id))
                 .collect(),
             rotations: HashMap::new(),
+            brightness_map: HashMap::new(),
             config_ref,
             dropped: false,
         })
@@ -221,6 +224,21 @@ impl DisplayConfigTransaction for RealDisplayConfigTransaction {
         // apply them.
         self.rotations.insert(display_id, rotation);
 
+        Ok(())
+    }
+
+    fn set_brightness(&mut self, uuid: &str, brightness: f32) -> Result<(), Error> {
+        if self.dropped {
+            return Err(Error::InvalidTransactionState);
+        } else if brightness < 0.0 || brightness > 1.0 {
+            return Err(Error::InvalidBrightness(brightness));
+        }
+
+        let display_id = self.display_id(uuid)?;
+        if self.brightness_map.contains_key(&display_id) {
+            return Err(Error::DuplicateConfiguration(uuid.to_owned()));
+        }
+        self.brightness_map.insert(display_id, brightness);
         Ok(())
     }
 
@@ -305,6 +323,17 @@ impl DisplayConfigTransaction for RealDisplayConfigTransaction {
             )?;
         }
 
+        for (&display_id, &brightness) in &self.brightness_map {
+            cg_error_to_result(
+                display_services_set_brightness(display_id, brightness),
+                format!(
+                    "While attempting to set display brightness of {:?} to {:?}",
+                    display_id, brightness
+                )
+                .as_str(),
+            )?;
+        }
+
         self.dropped = true;
         Ok(())
     }
@@ -336,6 +365,7 @@ pub struct RealDisplay {
     rotation: Rotation,
     mode: RealDisplayMode,
     modes: Vec<RealDisplayMode>,
+    brightness: f32,
 }
 
 /// Undo display_rotation to the Point.  Note that this is not
@@ -468,6 +498,12 @@ impl RealDisplay {
         let enabled = cg_display_is_active(display_id) || cg_display_is_in_mirror_set(display_id);
         let cg_point = cg_display_bounds(display_id).origin;
 
+        let mut brightness = 0.0;
+        cg_error_to_result(
+            display_services_get_brightness(display_id, &mut brightness),
+            "Error obtaining display brightness",
+        )?;
+
         Ok(RealDisplay {
             display_id,
             uuid,
@@ -481,6 +517,7 @@ impl RealDisplay {
             rotation,
             mode: current_mode.unwrap(),
             modes: mode_buckets.into_keys().collect::<Vec<RealDisplayMode>>(),
+            brightness,
         })
     }
 }
@@ -500,6 +537,10 @@ impl Display for RealDisplay {
 
     fn rotation(&self) -> Rotation {
         self.rotation
+    }
+
+    fn brightness(&self) -> f32 {
+        self.brightness
     }
 
     type DisplayModeType = RealDisplayMode;

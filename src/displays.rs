@@ -96,6 +96,8 @@ pub enum Error {
     /// made a against a DisplayTransaction more than once.
     /// The argument is the UUID.
     DuplicateConfiguration(String),
+    /// Invalid brightness value: must be between 0.0 and 1.0.
+    InvalidBrightness(f32),
     /// Reported when a configuration operation is attempted on an
     /// invalid DisplayConfigTransaction.
     InvalidTransactionState,
@@ -110,15 +112,17 @@ pub enum Error {
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        use Error::*;
+
         match self {
-            Error::UnknownUUID(uuid) => {
+            UnknownUUID(uuid) => {
                 write!(
                     f,
                     "Attempted to configure a non-existent display with UUID {}",
                     uuid
                 )
             }
-            Error::DuplicateConfiguration(uuid) => {
+            DuplicateConfiguration(uuid) => {
                 write!(
                     f,
                     "Attempted to change a setting more than once on display \
@@ -126,17 +130,24 @@ impl std::fmt::Display for Error {
                     uuid
                 )
             }
-            Error::InvalidTransactionState => {
+            InvalidBrightness(value) => {
+                write!(
+                    f,
+                    "Invalid brightness value: {}.  Must be between 0.0 and 1.0.",
+                    value
+                )
+            }
+            InvalidTransactionState => {
                 write!(
                     f,
                     "While attempting to configure displays the configuration \
                 transaction became invalid."
                 )
             }
-            Error::Poisoned(msg) => {
+            Poisoned(msg) => {
                 write!(f, "Lock poison error: {}", msg)
             }
-            Error::Internal(msg) => write!(f, "{}", msg),
+            Internal(msg) => write!(f, "{}", msg),
         }
     }
 }
@@ -217,6 +228,9 @@ pub trait Display: std::fmt::Debug {
     /// What is the current rotation state of the display?
     fn rotation(&self) -> Rotation;
 
+    /// The display brightness as a float between 0.0 and 1.0.
+    fn brightness(&self) -> f32;
+
     /// The type of the display mode associated with this Display.
     // TODO Perhaps in the future we could more tightly couple this with
     //   something akin to path dependent types.  For now dynamically check
@@ -274,6 +288,9 @@ pub trait DisplayConfigTransaction {
     /// Set the rotation of the given display.
     /// Will return an error if there is no display with the given UUID.
     fn set_rotation(&mut self, uuid: &str, rotation: Rotation) -> Result<(), Error>;
+
+    /// Set the brightness of the given display, value must be between 0.0 and 1.0.
+    fn set_brightness(&mut self, uuid: &str, brightness: f32) -> Result<(), Error>;
 
     /// Set the rotation of the given display.
     /// Will return an error if there is no display with the given UUID.
