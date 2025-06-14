@@ -8,6 +8,7 @@ use std::fmt::Formatter;
 use std::io::IsTerminal;
 use std::io::{BufReader, Read, Write};
 use std::path::PathBuf;
+use std::sync::atomic::AtomicUsize;
 use std::sync::{Condvar, LazyLock, Mutex, RwLock};
 
 use crate::config::*;
@@ -275,7 +276,8 @@ pub fn run<
             // Calling unwrap here should be okay, as there is a default value.
             let wait_string = sub_matches.get_one::<String>("WAIT").unwrap();
             let wait_period = humantime::parse_duration(wait_string)?;
-            daemon_command::<DS>(config_reader, format, wait_period)
+            let exit_after_first = sub_matches.get_flag("EXIT");
+            daemon_command::<DS>(config_reader, format, wait_period, exit_after_first)
         }
         Some(("list", sub_matches)) => {
             info!("List mode selected.");
@@ -341,6 +343,13 @@ fn argument_parse(args: &Vec<String>) -> Result<ArgMatches, clap::Error> {
         .short('w')
         .default_value("2s")
         .value_parser(clap::builder::NonEmptyStringValueParser::new());
+    // Option solely for testing purposes, so hidden.
+    let daemon_exit_arg = Arg::new("EXIT")
+        .help("Exit the daemon after the first reconfiguration event")
+        .hide(true)
+        .long("exit")
+        .short('e')
+        .action(ArgAction::SetTrue);
 
     let cmd = Command::new("knoll")
         .version(clap::crate_version!())
@@ -351,7 +360,8 @@ fn argument_parse(args: &Vec<String>) -> Result<ArgMatches, clap::Error> {
             Command::new("daemon")
                 .about("Run in daemon mode updating when the hardware configuration changes")
                 .arg(in_arg)
-                .arg(wait_arg),
+                .arg(wait_arg)
+                .arg(daemon_exit_arg),
             Command::new("list")
                 .about("Print information about available display modes")
                 .arg(out_arg),
@@ -773,6 +783,10 @@ fn list_command<DS: DisplayState>(
 static RECONFIGURE_LOCK: Mutex<bool> = Mutex::new(false);
 static RECONFIGURE_CONDVAR: Condvar = Condvar::new();
 
+/// Atomic counter to keep track of the number of reconfigurations that have
+/// taken place.
+static RECONFIGURE_COUNT: AtomicUsize = AtomicUsize::new(0);
+
 /// Helper to acquire the reconfiguration lock and notify the conditional
 /// variable.  It can also be used a callback for when displace notification
 /// changes.
@@ -789,6 +803,7 @@ fn daemon_command<DS: DisplayState>(
     mut config_reader: ConfigReader,
     format: crate::serde::Format,
     wait_period: std::time::Duration,
+    exit_after_first: bool,
 ) -> Result<(), Error> {
     // Spawn a thread to watch for reconfiguration changes.
     std::thread::spawn(move || {
@@ -821,28 +836,28 @@ fn daemon_command<DS: DisplayState>(
 
             // As close as I think we can get to monadic binding.
             let result = config_reader
-            .groups()
-            .and_then(|config_groups: Vec<ValidConfigGroup>| {
-                if config_groups.is_empty() {
-                    Err(Error::NoConfigGroups)
-                } else {
-                    DS::current()
-                        .map_err(|e| e.into())
-                        .and_then(|display_state: DS| {
-                            let current_config = state_to_config(&display_state);
-                            let config_str = serialize_to_string(format, &current_config).expect(
-                                "Should be impossible to fail on serializing internally constructed configuration.",
-                            );
-                            info!("Current display state:\n{}", config_str);
+                .groups()
+                .and_then(|config_groups: Vec<ValidConfigGroup>| {
+                    if config_groups.is_empty() {
+                        Err(Error::NoConfigGroups)
+                    } else {
+                        DS::current()
+                            .map_err(|e| e.into())
+                            .and_then(|display_state: DS| {
+                                let current_config = state_to_config(&display_state);
+                                let config_str = serialize_to_string(format, &current_config).expect(
+                                    "Should be impossible to fail on serializing internally constructed configuration.",
+                                );
+                                info!("Current display state:\n{}", config_str);
 
-                            find_most_precise_config_group(&config_groups, &display_state, format).and_then(
-                                |config_group: ValidConfigGroup| {
-                                    configure_displays(&display_state, config_group, format)
-                                },
-                            )
-                        })
-                }
-            });
+                                find_most_precise_config_group(&config_groups, &display_state, format).and_then(
+                                    |config_group: ValidConfigGroup| {
+                                        configure_displays(&display_state, config_group, format)
+                                    },
+                                )
+                            })
+                    }
+                });
 
             match result {
                 Err(e) => {
@@ -855,6 +870,8 @@ fn daemon_command<DS: DisplayState>(
 
             // Reconfiguration has completed.
             *reconfig_in_progress = false;
+            // Increment the reconfiguration counter.
+            RECONFIGURE_COUNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         }
     });
 
@@ -866,10 +883,17 @@ fn daemon_command<DS: DisplayState>(
     // monitor configuration is incorrect even before knoll is started.
     triger_reconfig();
 
-    // macOS will not trigger the callback unless there is an application
-    // loop running.
-    core_graphics::ns_application_load();
-    core_graphics::cf_run_loop_run();
+    if !exit_after_first {
+        // macOS will not trigger the callback unless there is an application
+        // loop running.
+        core_graphics::ns_application_load();
+        core_graphics::cf_run_loop_run();
+    } else {
+        // Otherwise, wait for the reconfiguration counter to increment.
+        while RECONFIGURE_COUNT.load(std::sync::atomic::Ordering::SeqCst) == 0 {
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        }
+    }
 
     Ok(())
 }

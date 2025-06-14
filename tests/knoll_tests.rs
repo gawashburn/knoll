@@ -28,7 +28,7 @@ static MUTEX: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 /// to stdout and stderr.
 fn run_knoll<DS: DisplayState>(
     args: Vec<&str>,
-    input: Option<String>,
+    input: Option<&[u8]>,
 ) -> (Option<Error>, String, String) {
     // Obtain the lock before proceeding.
     let _guard = MUTEX.lock().unwrap();
@@ -39,12 +39,12 @@ fn run_knoll<DS: DisplayState>(
     let file_err =
         std::fs::File::create(err_path.clone()).expect("Failed to open temporary file for stderr.");
     let file_err_clone = file_err.try_clone().expect("Cloning stderr file failed");
-    let res = if let Some(input_str) = input {
+    let res = if let Some(input_slice) = input {
         let in_path = dir.path().join("stdin");
         let mut file_in = std::fs::File::create(in_path.clone())
             .expect("Failed to open temporary file for stdin.");
         file_in
-            .write(input_str.as_bytes())
+            .write(input_slice)
             .expect("Failed to write to file.");
         file_in.flush().expect("Failed to flush file.");
         // Need to reopen the file for knoll to read from it.
@@ -81,12 +81,12 @@ fn run_knoll<DS: DisplayState>(
 }
 
 /// Run the knoll command with the given arguments using real displays.
-fn run_knoll_real(args: Vec<&str>, input: Option<String>) -> (Option<Error>, String, String) {
+fn run_knoll_real(args: Vec<&str>, input: Option<&[u8]>) -> (Option<Error>, String, String) {
     run_knoll::<RealDisplayState>(args, input)
 }
 
 /// Run the knoll command with the given arguments using fake displays.
-fn run_knoll_fake(args: Vec<&str>, input: Option<String>) -> (Option<Error>, String, String) {
+fn run_knoll_fake(args: Vec<&str>, input: Option<&[u8]>) -> (Option<Error>, String, String) {
     run_knoll::<FakeDisplayState>(args, input)
 }
 
@@ -125,7 +125,8 @@ fn test_real_default() {
         stderr
     );
     // Run idempotency test.
-    let (opt_err, stdout_new, stderr) = run_knoll_real(vec!["knoll", "-vvv"], Some(stdout.clone()));
+    let (opt_err, stdout_new, stderr) =
+        run_knoll_real(vec!["knoll", "-vvv"], Some(stdout.as_bytes()));
     // Verify that no error occurred.
     assert!(opt_err.is_none());
     // Verify that display configuration did happen.
@@ -157,13 +158,41 @@ fn test_fake_list() {
 }
 
 #[test]
+/// Test knoll daemon mode will work with the identity configuration.
+fn test_real_daemon() {
+    let (opt_err, stdout, stderr) = run_knoll_real(vec!["knoll", "-vvv"], None);
+    // Verify that no error occurred.
+    assert!(opt_err.is_none());
+    // Verify that no display configuration took place.
+    assert!(
+        !stderr.contains("Configuration complete."),
+        "Expected no configuration message in stderr, got:\n {}",
+        stderr
+    );
+    // Now run in daemon mod with the given configuration.
+    let (opt_err, _stdout_new, stderr) = run_knoll_real(
+        vec!["knoll", "-vvv", "daemon", "-e", "-w", "1s"],
+        Some(stdout.as_bytes()),
+    );
+    // Verify that no error occurred.
+    assert!(opt_err.is_none());
+    // Verify that display configuration did happen.
+    assert!(
+        stderr.contains("Daemon mode selected") && stderr.contains("Reconfiguration successful"),
+        "Expected messages in stderr, got:\n {}",
+        stderr
+    );
+}
+
+#[test]
 /// Test pipeline mode with a non-existent display UUID to trigger a
 /// NoMatchingConfigGroup error.
 fn test_unknown_uuid() {
     // Construct a config for a display UUID that is unlikely to exist.
     let uuid = "00000000000000000000000000000000";
     let config = format!("[ [ ( uuid: \"{}\" ) ] ]", uuid);
-    let (opt_err, _stdout, _stderr) = run_knoll_real(vec!["knoll", "--format=ron"], Some(config));
+    let (opt_err, _stdout, _stderr) =
+        run_knoll_real(vec!["knoll", "--format=ron"], Some(config.as_bytes()));
     match opt_err {
         Some(Error::NoMatchingConfigGroup(uuids)) => {
             // Verify that the UUID is the one we expected.
@@ -181,7 +210,8 @@ fn test_duplicate_config_entries() {
     let uuid = "00000000000000000000000000000000";
     let entry = format!("( uuid: \"{}\" )", uuid);
     let config = format!("[ [ {}, {} ] ]", entry, entry);
-    let (opt_err, _stdout, _stderr) = run_knoll_real(vec!["knoll", "--format=ron"], Some(config));
+    let (opt_err, _stdout, _stderr) =
+        run_knoll_real(vec!["knoll", "--format=ron"], Some(config.as_bytes()));
     match opt_err {
         Some(Error::Config(knoll::valid_config::Error::DuplicateDisplays(dups))) => {
             assert!(dups.contains(uuid));
@@ -213,7 +243,7 @@ fn test_extents_too_large() {
         to_string_pretty(&groups, PrettyConfig::default()).expect("RON serialization failed");
     // Run with modified configuration.
     let (opt_err2, _stdout2, _stderr2) =
-        run_knoll_real(vec!["knoll", "--format=ron"], Some(modified));
+        run_knoll_real(vec!["knoll", "--format=ron"], Some(modified.as_bytes()));
     match opt_err2 {
         Some(Error::NoMatchingDisplayMode(_uuid, msg)) => {
             assert!(msg.contains(size.to_string().as_str()));
@@ -223,11 +253,45 @@ fn test_extents_too_large() {
 }
 
 #[test]
+/// Test that we will correctly detect duplicate configuration groups.
+fn test_duplicate_group() {
+    // Obtain current configuration in RON format.
+    let (opt_err, stdout, _stderr) = run_knoll_real(vec!["knoll", "--format=ron"], None);
+    assert!(opt_err.is_none());
+    // Deserialize the configuration for editing.
+    let mut groups: ConfigGroups = from_str(&stdout).expect("Invalid RON output");
+    // Duplicate a configuration group.
+    if let Some(group) = groups.groups.first().cloned() {
+        groups.groups.push(group);
+    } else {
+        panic!("No groups found in the configuration");
+    }
+    // Serialize back to RON text.
+    let modified =
+        to_string_pretty(&groups, PrettyConfig::default()).expect("RON serialization failed");
+
+    // Run knoll with the ambiguous configuration
+    let (opt_err, _stdout, _stderr) =
+        run_knoll_fake(vec!["knoll", "--format=ron"], Some(modified.as_bytes()));
+
+    // Verify that an AmbiguousConfigGroup error was returned
+    assert!(
+        matches!(
+            &opt_err,
+            Some(Error::Config(knoll::valid_config::Error::DuplicateGroups(
+                _
+            )))
+        ),
+        "Expected DuplicateGroups error"
+    );
+}
+
+#[test]
 /// Test pipeline mode with invalid RON formatting triggers a deserialization error.
 fn test_invalid_ron_format() {
     let bad = "invalid ron config";
     let (opt_err, _stdout, _stderr) =
-        run_knoll_real(vec!["knoll", "--format=ron"], Some(bad.to_string()));
+        run_knoll_real(vec!["knoll", "--format=ron"], Some(bad.as_bytes()));
     assert!(
         matches!(opt_err, Some(Error::Serde(knoll::serde::Error::DeRon(_)))),
         "Expected RON deserialization error."
@@ -239,7 +303,7 @@ fn test_invalid_ron_format() {
 fn test_invalid_json_format() {
     let bad = "{ invalid json }";
     let (opt_err, _stdout, _stderr) =
-        run_knoll_real(vec!["knoll", "--format=json"], Some(bad.to_string()));
+        run_knoll_real(vec!["knoll", "--format=json"], Some(bad.as_bytes()));
     assert!(
         matches!(opt_err, Some(Error::Serde(knoll::serde::Error::DeJson(_)))),
         "Expected JSON deserialization error."
@@ -276,5 +340,35 @@ fn test_wait_arg_parsing_valid() {
     assert!(
         matches!(opt_err, Some(Error::Duration(_))),
         "Expected Duration error for invalid wait time."
+    );
+}
+
+#[test]
+/// Test that a RON input configuration containing invalid UTF-8 data is properly handled.
+fn test_invalid_utf8_in_ron() {
+    // Create a Vec<u8> containing valid start, invalid UTF-8 bytes, and valid end.
+    let mut bytes = "(groups: [".as_bytes().to_vec();
+    bytes.extend_from_slice(&[0xFF, 0xFE, 0xFD, 0xFC]); // Invalid UTF-8 bytes
+    bytes.extend_from_slice("])".as_bytes());
+
+    // Run knoll with the file path as input
+    let (opt_err, _stdout, _stderr) =
+        run_knoll_real(vec!["knoll", "--format=ron"], Some(bytes.as_slice()));
+
+    // Verify that a deserialization error occurred (either Serde error or IO error with invalid data)
+    assert!(
+        matches!(&opt_err, Some(Error::Utf8(_))),
+        "Expected error due to invalid UTF-8 data."
+    );
+}
+
+#[test]
+/// Test that passing an invalid argument to knoll results in an Argument error
+fn test_invalid_argument() {
+    let (opt_err, _stdout, _stderr) = run_knoll_real(vec!["knoll", "--bogus-argument"], None);
+
+    assert!(
+        matches!(&opt_err, Some(Error::Argument(arg)) if arg.kind() == clap::error::ErrorKind::UnknownArgument),
+        "Expected an invalid argument error"
     );
 }
