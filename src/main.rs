@@ -2,8 +2,6 @@
 // Objective-C is needed by the core_graphics module.
 // The core_graphics module also uses static_assertions to validate
 // some data structures at compile time.
-#[macro_use]
-extern crate objc;
 extern crate static_assertions;
 
 mod config;

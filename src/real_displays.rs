@@ -295,7 +295,14 @@ impl DisplayConfigTransaction for RealDisplayConfigTransaction {
         )?;
 
         for (&display_id, &rotation) in &self.rotations {
-            mpd_set_rotation(display_id, rotation.into())
+            cg_error_to_result(
+                sls_set_display_rotation(display_id, rotation.into()),
+                format!(
+                    "While attempting to set display rotation of {:?} to {:?}",
+                    display_id, rotation
+                )
+                .as_str(),
+            )?;
         }
 
         self.dropped = true;

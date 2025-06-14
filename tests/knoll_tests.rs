@@ -9,14 +9,14 @@ use knoll::config::ConfigGroups;
 use knoll::displays::DisplayState;
 use knoll::displays::Point;
 use knoll::fake_displays::FakeDisplayState;
-use knoll::knoll::{run, Error};
+use knoll::knoll::{Error, run};
 use knoll::real_displays::*;
 use ron::{
     de::from_str,
-    ser::{to_string_pretty, PrettyConfig},
+    ser::{PrettyConfig, to_string_pretty},
 };
 use std::io::{Read, Write};
-use std::sync::{Arc, LazyLock, Mutex};
+use std::sync::{LazyLock, Mutex};
 use tempfile::tempdir;
 
 // Mutex to prevent tests from running concurrently, as they can interfere

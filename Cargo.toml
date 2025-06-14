@@ -14,7 +14,6 @@ coverage-helper = "0.2"
 
 [dependencies]
 clap = { version = "4.5", features = ["color", "cargo"] }
-objc = "0.2"
 static_assertions = "1.1"
 serde = "1.0"
 ron = "0.10"

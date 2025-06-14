@@ -10,7 +10,6 @@ use std::os::raw::c_int;
 use std::os::raw::c_void;
 use std::ptr::{null, null_mut};
 
-use objc::runtime::Object;
 use static_assertions::const_assert;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -347,6 +346,8 @@ unsafe extern "C" {
         enabled: bool,
     ) -> CGError;
 
+    /// Discovered through disassembly of the SkyLight framework.
+    fn SLSSetDisplayRotation(display_id: CGDirectDisplayID, rotation: i32) -> CGError;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -612,28 +613,6 @@ pub fn cg_display_mirrors_display(display_id: DisplayID) -> Option<DisplayID> {
         Some(DisplayID { id: mirrored_id })
     }
 }
-
-/// Helper to set the rotation of a display via the MPDisplay Objective-C class.
-// TODO As this is the only use of Objective-C in this code-base,
-//   in the future it may be worth investigate the private
-//   `CGSSetDisplayRotation` function instead.  Its existence is
-//   referenced here: https://github.com/NUIKit/CGSInternal/issues/3
-//   but there is no documentation of what its expected function
-//   prototype would be.  So some further detective work will be
-//   necessary.
-pub fn mpd_set_rotation(display_id: DisplayID, rotation: i32) {
-    // https://github.com/phatblat/macOSPrivateFrameworks/tree/9047371eb80f925642c8a7c4f1e00095aec66044/PrivateFrameworks/MonitorPanel
-    unsafe {
-        let cls = class!(MPDisplay);
-        let obj: *mut Object = objc::msg_send![cls, alloc];
-        assert_ne!(
-            obj,
-            null_mut(),
-            "Received a null pointer as a result of Objective-C message send."
-        );
-        let _: () = objc::msg_send![obj, initWithCGSDisplayID:display_id.id];
-        let _: () = objc::msg_send![obj, setOrientation:rotation];
-    }
-    // TODO Need to wait to confirm operation succeeded?
-    //   So far I have never seen a rotation fail in practice.
+pub fn sls_set_display_rotation(display_id: DisplayID, rotation: i32) -> CGError {
+    unsafe { SLSSetDisplayRotation(display_id.id, rotation) }
 }
