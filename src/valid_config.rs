@@ -150,6 +150,9 @@ impl PartialOrd for ValidConfigGroup {
 }
 
 impl Ord for ValidConfigGroup {
+    // Disable coverage as this function should never be called, it just
+    // exists to satisfy the Ord trait.
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn cmp(&self, _other: &Self) -> Ordering {
         panic!("Ord is required sort ValidConfigGroup can be sorted, but isn't actually used.")
     }
@@ -221,11 +224,11 @@ impl ValidConfigGroup {
 #[test]
 #[cfg_attr(coverage_nightly, coverage(off))]
 fn test_valid_config_from_empty() {
-    match ValidConfigGroup::from(ConfigGroup { configs: vec![] }) {
-        Err(Error::EmptyGroup) => { /* Correctly detected error, so no-op */ }
-        Err(_) => panic!("Unexpected error in validation."),
-        Ok(_) => panic!("Failed to detect empty configuration."),
-    }
+    let result = ValidConfigGroup::from(ConfigGroup { configs: vec![] });
+    assert!(
+        matches!(result, Err(Error::EmptyGroup)),
+        "Failed to detect empty configuration."
+    );
 }
 
 /// Check that `ValidConfigGroup::from` correctly reports an error for
@@ -233,7 +236,7 @@ fn test_valid_config_from_empty() {
 #[test]
 #[cfg_attr(coverage_nightly, coverage(off))]
 fn test_valid_config_from_duplicate() {
-    match ValidConfigGroup::from(ConfigGroup {
+    let result = ValidConfigGroup::from(ConfigGroup {
         configs: vec![
             Config {
                 uuid: "abcdef1234".to_owned(),
@@ -258,16 +261,15 @@ fn test_valid_config_from_duplicate() {
                 rotation: None,
             },
         ],
-    }) {
-        Err(Error::DuplicateDisplays(uuids)) => {
-            assert_eq!(uuids.len(), 1);
-            assert!(uuids.contains("abcdef1234"))
-        }
-        Err(_) => panic!("Unexpected error in validation."),
-        Ok(_) => panic!("Failed to detect duplicate configuration."),
-    }
+    });
+    assert!(
+        matches!(
+        result,
+        Err(Error::DuplicateDisplays(uuids)) if uuids.len() == 1 && uuids.contains("abcdef1234")),
+        "Failed to detect duplicate configuration."
+    );
 
-    match ValidConfigGroup::from(ConfigGroup {
+    let result = ValidConfigGroup::from(ConfigGroup {
         configs: vec![
             Config {
                 uuid: "abcdef1234".to_owned(),
@@ -314,15 +316,14 @@ fn test_valid_config_from_duplicate() {
                 rotation: None,
             },
         ],
-    }) {
-        Err(Error::DuplicateDisplays(uuids)) => {
-            assert_eq!(uuids.len(), 2);
-            assert!(uuids.contains("abcdef1234"));
-            assert!(uuids.contains("foobarbaz"));
-        }
-        Err(_) => panic!("Unexpected error in validation."),
-        Ok(_) => panic!("Failed to detect duplicate configuration."),
-    }
+    });
+    assert!(
+        matches!(
+            result,
+            Err(Error::DuplicateDisplays(uuids)) if uuids.len() == 2 && uuids.contains("abcdef1234") && uuids.contains("foobarbaz")
+        ),
+        "Failed to detect duplicate configuration."
+    );
 }
 
 #[cfg(test)]
@@ -336,7 +337,7 @@ mod valid_config_group_tests {
     /// mirror_of with incompatible display options.
     #[test]
     fn test_valid_config_from_invalid_mirror() {
-        match ValidConfigGroup::from(ConfigGroup {
+        let result = ValidConfigGroup::from(ConfigGroup {
             configs: vec![Config {
                 uuid: "abcdef1234".to_owned(),
                 mirror_of: Some("5678defghi".to_owned()),
@@ -348,13 +349,14 @@ mod valid_config_group_tests {
                 color_depth: None,
                 rotation: None,
             }],
-        }) {
-            Err(Error::InvalidMirrorConfig(uuid)) => {
-                assert_eq!(uuid, "abcdef1234");
-            }
-            Err(_) => panic!("Unexpected error in validation."),
-            Ok(_) => panic!("Failed to detect invalid mirror configuration."),
-        }
+        });
+        assert!(
+            matches!(
+                result,
+                Err(Error::InvalidMirrorConfig(uuid)) if uuid == "abcdef1234"
+            ),
+            "Failed to detect invalid mirror configuration."
+        );
     }
 
     /// Test that `ValidConfigGroup::from` correctly reports an error when
@@ -399,14 +401,11 @@ mod valid_config_group_tests {
             ],
         };
 
-        match ValidConfigGroup::from(cg) {
-            Err(Error::MirrorOfMirror(uuid, target_uuid)) => {
-                assert_eq!(uuid, "A");
-                assert_eq!(target_uuid, "B");
-            }
-            Err(_) => panic!("Unexpected error in mirror-of-mirror validation."),
-            Ok(_) => panic!("Failed to detect mirror-of-mirror configuration."),
-        }
+        let result = ValidConfigGroup::from(cg);
+        assert!(
+            matches!(result, Err(Error::MirrorOfMirror(uuid, target_uuid)) if uuid == "A" && target_uuid == "B"),
+            "Failed to detect mirror-of-mirror configuration."
+        );
     }
 }
 
@@ -453,7 +452,7 @@ mod valid_config_groups_tests {
     /// Test that `validate_config_groups` detects duplicate configuration groups.
     #[test]
     fn test_config_validation_duplicates() {
-        match validate_config_groups(ConfigGroups {
+        let result = validate_config_groups(ConfigGroups {
             groups: vec![
                 ConfigGroup {
                     configs: vec![Config {
@@ -482,18 +481,15 @@ mod valid_config_groups_tests {
                     }],
                 },
             ],
-        }) {
-            Err(Error::DuplicateGroups(groups)) => {
-                assert_eq!(groups.len(), 1);
-                assert!(groups
-                    .iter()
-                    .all(|cg| cg.uuids.len() == 1 && cg.uuids.contains("abcdef1234")))
-            }
-            Err(_) => panic!("Unexpected error in validation."),
-            Ok(_) => panic!("Failed to detect duplicate configuration groups."),
-        }
+        });
+        assert!(
+            matches!(result, Err(Error::DuplicateGroups(groups)) if
+                groups.len() == 1 &&
+                groups.iter().all(|cg| cg.uuids.len() == 1 && cg.uuids.contains("abcdef1234"))),
+            "Failed to detect duplicate configuration groups."
+        );
 
-        match validate_config_groups(ConfigGroups {
+        let result = validate_config_groups(ConfigGroups {
             groups: vec![
                 ConfigGroup {
                     configs: vec![
@@ -548,16 +544,13 @@ mod valid_config_groups_tests {
                     ],
                 },
             ],
-        }) {
-            Err(Error::DuplicateGroups(groups)) => {
-                assert_eq!(groups.len(), 1);
-                assert!(groups.iter().all(|cg| cg.uuids.len() == 2
-                    && cg.uuids.contains("abcdef1234")
-                    && cg.uuids.contains("foobarbaz")));
-            }
-            Err(_) => panic!("Unexpected error in validation."),
-            Ok(_) => panic!("Failed to detect duplicate configuration groups."),
-        }
+        });
+        assert!(
+            matches!(result, Err(Error::DuplicateGroups(groups)) if
+                groups.len() == 1 &&
+                groups.iter().all(|cg| cg.uuids.len() == 2 && cg.uuids.contains("abcdef1234") && cg.uuids.contains("foobarbaz"))),
+            "Failed to detect duplicate configuration groups."
+        );
     }
 
     /// Test that sorting configuration groups works as expected.

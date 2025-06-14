@@ -111,10 +111,7 @@ mod format_tests {
     #[test]
     fn test_format_from_unsupported() {
         let err = Format::from("xml").unwrap_err();
-        match &err {
-            Error::UnsupportedFormat(fs) => assert_eq!(fs, "xml"),
-            _ => panic!("Expected UnsupportedFormat"),
-        }
+        assert!(matches!(&err, Error::UnsupportedFormat(fs) if fs == "xml"));
         assert_eq!(format!("{}", err), "Unsupported format: xml");
         assert!(err.source().is_none());
     }
@@ -194,10 +191,7 @@ mod serialization_tests {
     fn test_deserialize_invalid_ron() {
         let invalid = "(a: )";
         let err = deserialize::<TestStruct>(Format::Ron, invalid).unwrap_err();
-        match err {
-            Error::DeRon(_) => {}
-            _ => panic!("Expected DeRon error"),
-        }
+        assert!(matches!(&err, Error::DeRon(_)), "Expected DeRon error");
         assert!(err.source().is_some());
         assert!(format!("{}", err).starts_with("RON deserialization error:"));
     }
@@ -206,10 +200,7 @@ mod serialization_tests {
     fn test_deserialize_invalid_json() {
         let invalid = "{a:}";
         let err = deserialize::<TestStruct>(Format::Json, invalid).unwrap_err();
-        match err {
-            Error::DeJson(_) => {}
-            _ => panic!("Expected DeJson error"),
-        }
+        assert!(matches!(&err, Error::DeJson(_)), "Expected DeJson error");
         assert!(err.source().is_some());
         assert!(format!("{}", err).starts_with("JSON deserialization error:"));
     }
@@ -219,10 +210,10 @@ mod serialization_tests {
         let invalid = vec![0xff, 0xfe, 0xfd];
         let e = String::from_utf8(invalid).unwrap_err();
         let err: Error = e.into();
-        match &err {
-            Error::Utf8Conversion(_) => {}
-            _ => panic!("Expected Utf8Conversion error"),
-        }
+        assert!(
+            matches!(&err, Error::Utf8Conversion(_)),
+            "Expected Utf8Conversion error"
+        );
         assert!(err.source().is_some());
         assert!(format!("{}", err).starts_with("Error converting from UTF-8 to string format:"));
     }
