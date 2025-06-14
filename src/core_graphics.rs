@@ -150,7 +150,7 @@ impl From<CFStringBuiltInEncodings> for CFStringEncoding {
 #[link(name = "OSD", kind = "framework")]
 #[link(name = "MonitorPanel", kind = "framework")]
 #[link(name = "SkyLight", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     /// https://developer.apple.com/documentation/corefoundation/1521153-cfrelease
     fn CFRelease(cf: CFTypeRef);
 
@@ -445,11 +445,7 @@ pub fn cg_display_modes_at_index(modes: CGDisplayModeArray, idx: CFIndex) -> CGD
 pub fn cg_display_copy_display_mode(display_id: DisplayID) -> Option<CGDisplayModeRef> {
     unsafe {
         let mode = CGDisplayCopyDisplayMode(display_id.id);
-        if !mode.is_null() {
-            Some(mode)
-        } else {
-            None
-        }
+        if !mode.is_null() { Some(mode) } else { None }
     }
 }
 

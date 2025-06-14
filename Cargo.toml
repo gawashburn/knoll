@@ -3,11 +3,11 @@ name = "knoll"
 description = "A command-line tool for configuring macOS displays"
 authors = ["Geoffrey Washburn <geoff@washburght.org>"]
 version = "0.3.1"
-edition = "2021"
+edition = "2024"
 license = "MIT"
 repository = "https://github.com/gawashburn/knoll"
 categories = ["command-line-utilities"]
-rust-version = "1.82.0"
+rust-version = "1.85.0"
 
 [dev-dependencies]
 coverage-helper = "0.2"
