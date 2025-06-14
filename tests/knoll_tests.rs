@@ -1,7 +1,10 @@
-#![cfg_attr(all(coverage_nightly, test), feature(coverage_attribute))]
+#![cfg_attr(
+    all(coverage_nightly, test),
+    feature(coverage_attribute),
+    coverage(off)
+)]
 extern crate knoll;
 
-use coverage_helper::test;
 use knoll::config::ConfigGroups;
 use knoll::displays::DisplayState;
 use knoll::displays::Point;
@@ -12,11 +15,14 @@ use ron::{
     de::from_str,
     ser::{to_string_pretty, PrettyConfig},
 };
-use serial_test::serial;
 use std::io::{Read, Write};
+use std::sync::{Arc, LazyLock, Mutex};
 use tempfile::tempdir;
 
-#[cfg_attr(all(coverage_nightly, test), coverage(off))]
+// Mutex to prevent tests from running concurrently, as they can interfere
+// with each other in various ways.
+static MUTEX: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
 /// Run the knoll command with the given arguments an optional input and
 /// returns whether the invoked resulted in an error and the text output
 /// to stdout and stderr.
@@ -24,6 +30,9 @@ fn run_knoll<DS: DisplayState>(
     args: Vec<&str>,
     input: Option<String>,
 ) -> (Option<Error>, String, String) {
+    // Obtain the lock before proceeding.
+    let _guard = MUTEX.lock().unwrap();
+
     let mut vec_out: Vec<u8> = Vec::new();
     let dir = tempdir().expect("Failed to create temporary directory.");
     let err_path = dir.path().join("stderr");
@@ -71,20 +80,17 @@ fn run_knoll<DS: DisplayState>(
     (opt_error, String::from_utf8(vec_out).unwrap(), string_err)
 }
 
-#[cfg_attr(all(coverage_nightly, test), coverage(off))]
 /// Run the knoll command with the given arguments using real displays.
 fn run_knoll_real(args: Vec<&str>, input: Option<String>) -> (Option<Error>, String, String) {
     run_knoll::<RealDisplayState>(args, input)
 }
 
-#[cfg_attr(all(coverage_nightly, test), coverage(off))]
 /// Run the knoll command with the given arguments using fake displays.
 fn run_knoll_fake(args: Vec<&str>, input: Option<String>) -> (Option<Error>, String, String) {
     run_knoll::<FakeDisplayState>(args, input)
 }
 
 #[test]
-#[serial]
 /// Test the knoll --help command
 fn test_help() {
     let (opt_err, _, _) = run_knoll_real(vec!["knoll", "--help"], None);
@@ -96,7 +102,6 @@ fn test_help() {
 }
 
 #[test]
-#[serial]
 /// Test the knoll --version command
 fn test_version() {
     let (opt_err, _, _) = run_knoll_real(vec!["knoll", "--version"], None);
@@ -108,7 +113,6 @@ fn test_version() {
 }
 
 #[test]
-#[serial]
 /// Test the default knoll command behavior with real displays.
 fn test_real_default() {
     let (opt_err, stdout, stderr) = run_knoll_real(vec!["knoll", "-vvv"], None);
@@ -135,28 +139,24 @@ fn test_real_default() {
 }
 
 #[test]
-#[serial]
 /// Test the default knoll list command behavior with real displays.
 fn test_real_list() {
     run_knoll_real(vec!["knoll", "list"], None);
 }
 
 #[test]
-#[serial]
 /// Test the default knoll command behavior with fake displays.
 fn test_fake_default() {
     run_knoll_fake(vec!["knoll", "-vvv"], None);
 }
 
 #[test]
-#[serial]
 /// Test the default knoll list command behavior with fake displays.
 fn test_fake_list() {
     run_knoll_fake(vec!["knoll", "list"], None);
 }
 
 #[test]
-#[serial]
 /// Test pipeline mode with a non-existent display UUID to trigger a
 /// NoMatchingConfigGroup error.
 fn test_unknown_uuid() {
@@ -174,7 +174,6 @@ fn test_unknown_uuid() {
 }
 
 #[test]
-#[serial]
 /// Test pipeline mode with duplicate display entries triggers a
 /// DuplicateDisplays config error.
 fn test_duplicate_config_entries() {
@@ -192,7 +191,6 @@ fn test_duplicate_config_entries() {
 }
 
 #[test]
-#[serial]
 /// Test that modifying extents of display at origin (0,0) to a huge value triggers
 /// an error finding a matching mode.
 fn test_extents_too_large() {

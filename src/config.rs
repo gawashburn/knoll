@@ -1,9 +1,9 @@
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
+
 use crate::displays::Point;
 use crate::displays::Rotation;
 ///! Data structures used for representing the current state of the attached
 /// displays as well as requesting changes to that configuration.
-use coverage_helper::test;
-
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::{Eq, PartialEq};
 
@@ -34,6 +34,7 @@ where
 
 /// Some basic sanity checking for `serialize_opt`.
 #[test]
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn test_serialize_opt() {
     {
         let mut buffer = String::new();
@@ -60,6 +61,7 @@ fn test_serialize_opt() {
 
 /// Some basic sanity checking for `deserialize_opt`.
 #[test]
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn test_deserialize_opt() {
     let mut json_de = serde_json::de::Deserializer::from_str("0");
     let result: Option<u64> =
@@ -163,6 +165,7 @@ pub struct ConfigGroups {
 
 /// Sanity check configuration serialization.
 #[test]
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn test_serialization() {
     let c1 = Config::default();
     let c2 = Config {
@@ -404,6 +407,7 @@ fn test_serialization() {
 
 /// Sanity check configuration deserialization.
 #[test]
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn test_deserialization() {
     match serde_json::de::from_str::<'static, Config>("{}") {
         Err(_) => { /* Failed as expected, so no-op */ }

@@ -1,3 +1,4 @@
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 use serde::{Deserialize, Serialize};
 use std::fmt::Formatter;
 use std::io::Write;
@@ -95,6 +96,7 @@ impl Format {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod format_tests {
     use super::*;
     use coverage_helper::test;
@@ -152,6 +154,7 @@ pub fn deserialize<'a, D: Deserialize<'a>>(format: Format, str: &'a str) -> Resu
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod serialization_tests {
     use super::*;
     use coverage_helper::test;

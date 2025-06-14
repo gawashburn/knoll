@@ -1,8 +1,8 @@
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 //! This module provides a data structure that is allows for more efficient
 //! access to a configuration group that has been validated as being
 //! semantically consistent.  That is, it doesn't have duplicate displays
 //! and is non-empty.
-use coverage_helper::test;
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeSet, HashMap, HashSet};
 
@@ -219,6 +219,7 @@ impl ValidConfigGroup {
 /// Check that `ValidConfigGroup::from` correctly reports an error for an
 /// empty group.
 #[test]
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn test_valid_config_from_empty() {
     match ValidConfigGroup::from(ConfigGroup { configs: vec![] }) {
         Err(Error::EmptyGroup) => { /* Correctly detected error, so no-op */ }
@@ -230,6 +231,7 @@ fn test_valid_config_from_empty() {
 /// Check that `ValidConfigGroup::from` correctly reports an error for
 /// duplicate configurations.
 #[test]
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn test_valid_config_from_duplicate() {
     match ValidConfigGroup::from(ConfigGroup {
         configs: vec![
@@ -324,6 +326,7 @@ fn test_valid_config_from_duplicate() {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod valid_config_group_tests {
     use super::*;
     use crate::displays::Point;
@@ -443,6 +446,7 @@ pub fn validate_config_groups(cgs: ConfigGroups) -> Result<Vec<ValidConfigGroup>
 ////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod valid_config_groups_tests {
     use super::*;
     use coverage_helper::test;
