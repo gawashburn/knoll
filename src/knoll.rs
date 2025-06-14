@@ -687,7 +687,7 @@ fn state_to_config<DS: DisplayState>(display_state: &DS) -> ConfigGroups {
                     frequency: Some(mode.frequency()),
                     color_depth: Some(mode.color_depth()),
                     rotation: Some(display.rotation()),
-                    brightness: Some(display.brightness()),
+                    brightness: display.brightness(),
                     ..config
                 }
             }

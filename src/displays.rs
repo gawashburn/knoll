@@ -228,8 +228,8 @@ pub trait Display: std::fmt::Debug {
     /// What is the current rotation state of the display?
     fn rotation(&self) -> Rotation;
 
-    /// The display brightness as a float between 0.0 and 1.0.
-    fn brightness(&self) -> f32;
+    /// The display brightness, if there is one, as a float between 0.0 and 1.0.
+    fn brightness(&self) -> Option<f32>;
 
     /// The type of the display mode associated with this Display.
     // TODO Perhaps in the future we could more tightly couple this with

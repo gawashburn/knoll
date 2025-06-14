@@ -365,7 +365,7 @@ pub struct RealDisplay {
     rotation: Rotation,
     mode: RealDisplayMode,
     modes: Vec<RealDisplayMode>,
-    brightness: f32,
+    brightness: Option<f32>,
 }
 
 /// Undo display_rotation to the Point.  Note that this is not
@@ -499,10 +499,14 @@ impl RealDisplay {
         let cg_point = cg_display_bounds(display_id).origin;
 
         let mut brightness = 0.0;
-        cg_error_to_result(
+        let brightness = match cg_error_to_result(
             display_services_get_brightness(display_id, &mut brightness),
             "Error obtaining display brightness",
-        )?;
+        ) {
+            Ok(()) => Some(brightness),
+            Err(Error::Internal(_)) => None, // Not all displays support brightness.
+            Err(e) => return Err(e),         // Other errors are unexpected.
+        };
 
         Ok(RealDisplay {
             display_id,
@@ -539,7 +543,7 @@ impl Display for RealDisplay {
         self.rotation
     }
 
-    fn brightness(&self) -> f32 {
+    fn brightness(&self) -> Option<f32> {
         self.brightness
     }
 

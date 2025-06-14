@@ -168,7 +168,7 @@ pub struct FakeDisplay {
     rotation: Rotation,
     mode: FakeDisplayMode,
     modes: Vec<FakeDisplayMode>,
-    brightness: f32,
+    brightness: Option<f32>,
 }
 
 impl FakeDisplay {
@@ -195,7 +195,7 @@ impl FakeDisplay {
                 self.mirrored_display = mirror_uuid;
             }
             FakeDisplayEdit::SetBrightness(b) => {
-                self.brightness = b;
+                self.brightness = Some(b);
             }
         }
     }
@@ -222,7 +222,7 @@ impl Display for FakeDisplay {
         self.rotation
     }
 
-    fn brightness(&self) -> f32 {
+    fn brightness(&self) -> Option<f32> {
         self.brightness
     }
 

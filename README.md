@@ -467,6 +467,7 @@ A configuration may contain the following fields:
 * `brightness`
     * This specifies the current or requested brightness of the display as a
       floating point value between 0.0 (dim) and 1.0 (maximum brightness).
+      Note that not all displays support brightness control at this time.
         * JSON syntax: `"brightness": 1.0`.
         * RON syntax: `brightness: 1.0`.
         * Nix syntax: `brightness = 1.0`.
