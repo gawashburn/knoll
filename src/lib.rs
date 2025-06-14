@@ -10,5 +10,5 @@ pub mod fake_displays;
 pub mod indirect_logger;
 pub mod knoll;
 pub mod real_displays;
-mod serde;
+pub mod serde;
 pub mod valid_config;

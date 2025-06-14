@@ -221,3 +221,60 @@ fn test_extents_too_large() {
         _ => panic!("Expected NoMatchingDisplayMode error, got {:?}", opt_err2),
     }
 }
+
+#[test]
+/// Test pipeline mode with invalid RON formatting triggers a deserialization error.
+fn test_invalid_ron_format() {
+    let bad = "invalid ron config";
+    let (opt_err, _stdout, _stderr) =
+        run_knoll_real(vec!["knoll", "--format=ron"], Some(bad.to_string()));
+    assert!(
+        matches!(opt_err, Some(Error::Serde(knoll::serde::Error::DeRon(_)))),
+        "Expected RON deserialization error."
+    );
+}
+
+#[test]
+/// Test pipeline mode with invalid JSON formatting triggers a deserialization error.
+fn test_invalid_json_format() {
+    let bad = "{ invalid json }";
+    let (opt_err, _stdout, _stderr) =
+        run_knoll_real(vec!["knoll", "--format=json"], Some(bad.to_string()));
+    assert!(
+        matches!(opt_err, Some(Error::Serde(knoll::serde::Error::DeJson(_)))),
+        "Expected JSON deserialization error."
+    )
+}
+
+#[test]
+/// Test that specifying a non-existent input file triggers an IO error.
+fn test_input_file_not_found() {
+    // Use a path that should not exist.
+    // Create a random file suffix.
+    use rand::Rng;
+    let random_suffix: String = rand::rng()
+        .sample_iter(&rand::distr::Alphanumeric)
+        .take(5)
+        .map(char::from)
+        .collect();
+    // Construct a non-existent file path.
+
+    let non_existent = format!("/tmp/does_not_exist_{random_suffix}.ron");
+    let (opt_err, _stdout, _stderr) =
+        run_knoll_real(vec!["knoll", "--input", non_existent.as_str()], None);
+    assert!(
+        matches!(opt_err, Some(Error::Io(e)) if e.kind() == std::io::ErrorKind::NotFound),
+        "Expected IO error for non-existent input file."
+    );
+}
+
+#[test]
+/// Test parsing of a valid wait time argument for daemon command.
+fn test_wait_arg_parsing_valid() {
+    let (opt_err, _stdout, _stderr) =
+        run_knoll_real(vec!["knoll", "daemon", "--wait", "5 blips"], None);
+    assert!(
+        matches!(opt_err, Some(Error::Duration(_))),
+        "Expected Duration error for invalid wait time."
+    );
+}

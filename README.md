@@ -478,7 +478,7 @@ So far knoll has been working successfully for my specific use cases. However,
 there is still room for additional improvements:
 
 * Bug fixing. There remain many strange new displays to explore.
-* Writing more tests.
+* Writing more tests, explore using cargo-mutants.
 * Find a better API for enabling/disabling displays. Most users would expect
   this feature to put the display to sleep rather than detach it from the
   computer.
