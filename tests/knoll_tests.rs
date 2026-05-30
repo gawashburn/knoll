@@ -1,5 +1,5 @@
 #![cfg_attr(
-    all(coverage_nightly, test),
+    coverage_nightly,
     feature(coverage_attribute),
     coverage(off)
 )]

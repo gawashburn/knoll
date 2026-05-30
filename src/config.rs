@@ -1,5 +1,3 @@
-#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
-
 use crate::displays::Point;
 use crate::displays::Rotation;
 ///! Data structures used for representing the current state of the attached

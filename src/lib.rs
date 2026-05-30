@@ -1,4 +1,4 @@
-#![cfg_attr(all(coverage_nightly, test), feature(coverage_attribute))]
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 ///! Expose the knoll modules as part of a library.  This is only really
 /// necessary so that they will be visible in the `test` directory.
 extern crate static_assertions;

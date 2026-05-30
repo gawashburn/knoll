@@ -1,4 +1,3 @@
-#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 use serde::{Deserialize, Serialize};
 use std::fmt::Formatter;
 use std::io::Write;

@@ -1,4 +1,3 @@
-#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 //! This module provides a data structure that is allows for more efficient
 //! access to a configuration group that has been validated as being
 //! semantically consistent.  That is, it doesn't have duplicate displays
