@@ -21,16 +21,28 @@
           ];
         };
 
-        toolchain = (pkgs.rustChannelOf {
-          # NOTE: Uncomment to change the Rust toolchain used to build
-          # the project.  Also uncomment below.
-          # rustToolchain = ./rust-toolchain.toml;
-          # sha256 = "";
-        }).rust;
+        rustChannel = pkgs.rustChannelOf {
+          rustToolchain = ./rust-toolchain.toml;
+          sha256 = "11c20cr8irfg63j6mj5yl32s5qbs4z4qbfa0ibvrj9nqw480dxcs";
+        };
+
+        toolchain = rustChannel.rust.override {
+          extensions = [
+            "llvm-tools-preview"
+            "rust-analyzer-preview"
+          ];
+        };
+
+        cargo-llvm-cov = pkgs.cargo-llvm-cov.overrideAttrs (old: {
+          doCheck = false;
+          meta = old.meta // {
+            broken = false;
+          };
+        });
 
         naersk' = pkgs.callPackage naersk {
-          #cargo = toolchain;
-          #rustc = toolchain;
+          cargo = toolchain;
+          rustc = toolchain;
         };
 
       in rec {
@@ -39,9 +51,12 @@
           src = ./.;
         };
 
-        # For `nix develop` (optional, can be skipped):
+        # For `nix develop`:
         devShell = pkgs.mkShell {
-          nativeBuildInputs = [ toolchain ];
+          nativeBuildInputs = [
+            toolchain
+            cargo-llvm-cov
+          ];
         };
       }
     );
