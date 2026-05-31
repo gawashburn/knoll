@@ -51,14 +51,116 @@ cargo install knoll
 ### Nix
 
 The knoll repository contains a [Nix Flake](https://nixos.wiki/wiki/Flakes)
-that can be used to integrate knoll into your
-[nix-darwin](https://github.com/LnL7/nix-darwin/) configuration. I currently
-use the following `launchd` definition like:
+that exposes packages plus
+[Home Manager](https://github.com/nix-community/home-manager) and
+[nix-darwin](https://github.com/LnL7/nix-darwin/) modules.
+
+The examples below assume your module receives an `inputs` argument from your
+flake. If the configuration lives in a separate module file, pass it from your
+flake `outputs`:
 
 ```nix
-  launchd.user.agent = {
+{
+  outputs = inputs@{ nixpkgs, nix-darwin, home-manager, ... }: {
+    darwinConfigurations.example = nix-darwin.lib.darwinSystem {
+      specialArgs = { inherit inputs; };
+      modules = [
+        ./darwin.nix
+        home-manager.darwinModules.home-manager
+        {
+          home-manager.extraSpecialArgs = { inherit inputs; };
+        }
+      ];
+    };
+
+    homeConfigurations."you@example" = home-manager.lib.homeManagerConfiguration {
+      pkgs = nixpkgs.legacyPackages.aarch64-darwin;
+      extraSpecialArgs = { inherit inputs; };
+      modules = [ ./home.nix ];
+    };
+  };
+}
+```
+
+If you use Home Manager on macOS, import the module and provide your display
+configuration directly as Nix data:
+
+```nix
+{
+  imports = [
+    inputs.knoll.homeModules.knoll
+  ];
+
+  services.knoll = {
+    enable = true;
+    displayConfigs = [
+      [
+        # MacBook Pro display
+        {
+          uuid = "8684ad81e3ea92cb14f43eb88b97a3f7";
+          enabled = true;
+          origin = [ (-1792) 453 ];
+          extents = [ 1792 1120 ];
+          scaled = true;
+          frequency = 59;
+          color_depth = 8;
+          rotation = 0;
+        }
+      ]
+    ];
+  };
+}
+```
+
+The module writes the display configuration to JSON in the Nix store and
+creates a user LaunchAgent that runs `knoll daemon --format=json`. By default,
+it logs to `~/Library/Logs/knoll.out.log` and
+`~/Library/Logs/knoll.err.log`, and runs with verbosity `1`. These can be
+changed with `services.knoll.stdoutPath`, `services.knoll.stderrPath`, and
+`services.knoll.verbosity`. Set either log path to `null` to leave that stream
+to `launchd`; when set, log paths must be absolute paths.
+
+The same service interface is available to nix-darwin users:
+
+```nix
+{
+  system.primaryUser = "you";
+
+  imports = [
+    inputs.knoll.darwinModules.knoll
+  ];
+
+  services.knoll = {
+    enable = true;
+    displayConfigs = [
+      [
+        {
+          uuid = "8684ad81e3ea92cb14f43eb88b97a3f7";
+          enabled = true;
+        }
+      ]
+    ];
+  };
+}
+```
+
+nix-darwin requires `system.primaryUser` for user LaunchAgents. The knoll
+module uses that value to default logs to
+`/Users/${config.system.primaryUser}/Library/Logs/knoll.out.log` and
+`/Users/${config.system.primaryUser}/Library/Logs/knoll.err.log`.
+
+If you prefer to configure `launchd` directly from nix-darwin instead of using
+the module, the underlying configuration looks like this:
+
+```nix
+{ config, inputs, pkgs, ... }:
+let
+  knollPackage = inputs.knoll.packages.${pkgs.stdenv.hostPlatform.system}.default;
+  logDirectory = "/Users/${config.system.primaryUser}/Library/Logs";
+in
+{
+  launchd.user.agents = {
     knoll = {
-      path = [ "/run/current-system/sw/bin/" ];
       serviceConfig = {
         ProgramArguments = let
           configFile = pkgs.writeText "knoll-config.json"
@@ -75,21 +177,24 @@ use the following `launchd` definition like:
                   color_depth = 8;
                   rotation = 0;
                 }
-                ...
               ]
             ]);
         in
           [
-            "/run/current-system/sw/bin/knoll" "daemon" "-vvv" "--format=json"
+            "${knollPackage}/bin/knoll"
+            "daemon"
+            "-v"
+            "--format=json"
             "--input=${configFile}"
           ];
         KeepAlive = true;
         RunAtLoad = true;
-        StandardErrorPath = "/tmp/knoll.err";
-        StandardOutPath = "/tmp/knoll.out";
+        StandardErrorPath = "${logDirectory}/knoll.err.log";
+        StandardOutPath = "${logDirectory}/knoll.out.log";
       };
     };
   };
+}
 ```
 
 The particulars of the configuration file you craft in your Nix definition will
@@ -350,11 +455,10 @@ host$ knoll daemon --wait=500ms --input=my_config.json
 ### launchd
 
 The recommended solution for running knoll as a daemon is to make use of
-[
-`launchd`](https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPSystemStartup/Chapters/CreatingLaunchdJobs.html).
-If you are not using nix-darwin as described in
-the [Installation](#installation)
-section, you can still configure `launchd` manually.
+[`launchd`](https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPSystemStartup/Chapters/CreatingLaunchdJobs.html).
+If you are not using the Nix modules described in the
+[Installation](#installation) section, you can still configure `launchd`
+manually.
 Choose a service name unique to your host using
 the [reverse domain name](https://en.wikipedia.org/wiki/Reverse_domain_name_notation)
 convention and create a `.plist` file in `~/Library/LaunchAgents`:
@@ -378,15 +482,15 @@ convention and create a `.plist` file in `~/Library/LaunchAgents`:
         <array>
             <string>/path/to/knoll</string>
             <string>daemon</string>
-            <string>-vvv</string>
+            <string>-v</string>
             <string>--input=/path/to/config-file</string>
         </array>
         <key>RunAtLoad</key>
         <true/>
         <key>StandardErrorPath</key>
-        <string>/tmp/knoll.err</string>
+        <string>/Users/you/Library/Logs/knoll.err.log</string>
         <key>StandardOutPath</key>
-        <string>/tmp/knoll.out</string>
+        <string>/Users/you/Library/Logs/knoll.out.log</string>
     </dict>
 </plist>
 ```
@@ -394,9 +498,9 @@ convention and create a `.plist` file in `~/Library/LaunchAgents`:
 You can then enable and start service using
 
 ```bash
-launchctl enable gui/$(id -u)/my.service.knoll`
-launchctl start gui/$(id -u)/my.service.knoll`
-````
+launchctl enable gui/$(id -u)/my.service.knoll
+launchctl start gui/$(id -u)/my.service.knoll
+```
 
 ## Configuration reference
 
