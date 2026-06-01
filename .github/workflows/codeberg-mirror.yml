@@ -15,13 +15,32 @@ jobs:
   mirror:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - uses: yesolutions/mirror-action@v0.7.0
-        with:
-          REMOTE: git@codeberg.org:arcane-semantics/knoll.git
-          GIT_SSH_PRIVATE_KEY: ${{ secrets.CODEBERG_SSH_PRIVATE_KEY }}
-          GIT_SSH_KNOWN_HOSTS: ${{ secrets.CODEBERG_SSH_KNOWN_HOSTS }}
-          GIT_PUSH_ARGS: "--tags"
+      - name: Configure Codeberg SSH
+        env:
+          CODEBERG_SSH_PRIVATE_KEY: ${{ secrets.CODEBERG_SSH_PRIVATE_KEY }}
+          CODEBERG_ED25519_FINGERPRINT: SHA256:mIlxA9k46MmM6qdJOdMnAQpzGxF4WIVVL+fj+wZbw0g
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$CODEBERG_SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/codeberg
+          chmod 600 ~/.ssh/codeberg
+          ssh-keyscan -t ed25519 codeberg.org > ~/.ssh/known_hosts
+          ssh-keygen -lf ~/.ssh/known_hosts | grep -F "$CODEBERG_ED25519_FINGERPRINT"
+          cat > ~/.ssh/config <<'EOF'
+          Host codeberg.org
+            HostName codeberg.org
+            User git
+            IdentityFile ~/.ssh/codeberg
+            IdentitiesOnly yes
+            UserKnownHostsFile ~/.ssh/known_hosts
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Push mirror
+        run: |
+          git remote add codeberg git@codeberg.org:arcane-semantics/knoll.git
+          git push --tags codeberg "refs/remotes/origin/*:refs/heads/*"
