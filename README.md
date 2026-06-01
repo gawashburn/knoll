@@ -9,6 +9,8 @@
 
 A simple command-line tool for manipulating the configuration of macOS displays.
 
+This repository is also mirrored on [Codeberg](https://codeberg.org/arcane-semantics/knoll).
+
 ## Table of contents
 
 - [Installation](#installation)

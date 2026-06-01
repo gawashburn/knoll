@@ -1,0 +1,27 @@
+name: Mirror to Codeberg
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - "**"
+    tags:
+      - "**"
+  workflow_dispatch:
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: yesolutions/mirror-action@v0.7.0
+        with:
+          REMOTE: git@codeberg.org:arcane-semantics/knoll.git
+          GIT_SSH_PRIVATE_KEY: ${{ secrets.CODEBERG_SSH_PRIVATE_KEY }}
+          GIT_SSH_KNOWN_HOSTS: ${{ secrets.CODEBERG_SSH_KNOWN_HOSTS }}
+          GIT_PUSH_ARGS: "--tags"
